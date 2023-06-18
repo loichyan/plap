@@ -1,0 +1,22 @@
+[workspace]
+members = ["macro", "shared"]
+
+[package]
+name = "plap"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+authors = ["loichyan <loichyan@foxmail.com>"]
+edition = "2021"
+rust-version = "1.56"
+
+description = "An argument parser for proc-macros."
+readme = "README.md"
+repository = "https://github.com/loichyan/shared"
+
+[dependencies]
+plap-macro = { version = "=0.0.0", path = "macro" }
+plap-shared = { version = "=0.0.0", path = "shared" }
+
+[dev-dependencies]
+thiserror = "1.0"
+trybuild = "1.0"

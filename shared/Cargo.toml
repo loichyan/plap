@@ -1,0 +1,19 @@
+[package]
+name = "plap-shared"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+authors = ["loichyan <loichyan@foxmail.com>"]
+edition = "2021"
+rust-version = "1.56"
+
+description = "Shared types of the `plap` crate."
+readme = "README.md"
+repository = "https://github.com/loichyan/plap"
+
+[dependencies]
+proc-macro2 = "1.0"
+
+[dependencies.syn]
+version = "2.0"
+default-features = false
+features = ["parsing"]
