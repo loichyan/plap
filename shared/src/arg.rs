@@ -47,6 +47,13 @@ impl<T> Arg<T> {
         self
     }
 
+    /// The name of the group which the argument belongs to. Arguments in the group
+    /// conflicts with each other.
+    pub fn group(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_group(self.id, name);
+        self
+    }
+
     /// Collects a value for this argument.
     pub fn add_value(&mut self, span: Span, value: T) {
         self.values.push((value, span));

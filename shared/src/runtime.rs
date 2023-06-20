@@ -22,6 +22,7 @@ pub(crate) struct Runtime {
     required: BTreeSet<Id>,
     conflicts_with: BTreeMap<Id, Vec<Id>>,
     requires: BTreeMap<Id, Vec<Id>>,
+    group: BTreeMap<Id, Vec<Id>>,
     source: BTreeMap<Id, Vec<Span>>,
     error: ErrorCollector,
 }
@@ -60,6 +61,11 @@ impl Runtime {
         self.requires.entry(this).or_default().push(that);
     }
 
+    pub fn add_group(&mut self, this: Id, group: Name) {
+        let group = self.register(group);
+        self.requires.entry(group).or_default().push(this);
+    }
+
     pub fn add_source(&mut self, this: Id, span: Span) {
         self.source.entry(this).or_default().push(span);
     }
@@ -83,6 +89,7 @@ impl Runtime {
             required,
             conflicts_with,
             requires,
+            group,
             ..
         } = self;
         let mut buffer = Buffer::<&str> {
@@ -95,6 +102,16 @@ impl Runtime {
         let len = |id: &Id| source.get(id).map_or(0, Vec::len);
         let has = |id: &Id| len(id) > 0;
         let as_name = |id: Id| *names.get(&id).expect("undefined Id");
+
+        // Update relationships from groups
+        for (_, members) in group.iter() {
+            for i in 0..members.len() {
+                let this = members[i];
+                for &that in members[0..i].iter().chain(members[i + 1..].iter()) {
+                    conflicts_with.entry(this).or_default().push(that);
+                }
+            }
+        }
 
         for this in required.iter() {
             if !has(this) {
