@@ -92,7 +92,7 @@ impl Runtime {
         let mut add_error = |span: Span, err: crate::Error| {
             error.combine(syn::Error::new(span, context.format(&err)));
         };
-        let len = |id: &Id| source.get(id).map(Vec::len).unwrap_or(0);
+        let len = |id: &Id| source.get(id).map_or(0, Vec::len);
         let has = |id: &Id| len(id) > 0;
         let as_name = |id: Id| *names.get(&id).expect("undefined Id");
 
@@ -155,7 +155,7 @@ impl Runtime {
             }
         }
 
-        error.inner.take().map(Err).unwrap_or(Ok(()))
+        error.inner.take().map_or(Ok(()), Err)
     }
 }
 
