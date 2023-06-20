@@ -1,4 +1,7 @@
-use crate::{runtime::Rt, Id};
+use crate::{
+    runtime::{Id, Rt},
+    Name,
+};
 use proc_macro2::Span;
 
 /// An user-defined argument.
@@ -33,14 +36,14 @@ impl<T> Arg<T> {
     }
 
     /// This argument is mutually exclusive with the specified argument.
-    pub fn conflicts_with(self, id: Id) -> Self {
-        self.rt.borrow_mut().add_conflicts_with(self.id, id);
+    pub fn conflicts_with(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_conflicts_with(self.id, name);
         self
     }
 
     /// Sets an argument that is required when this one is present
-    pub fn requires(self, id: Id) -> Self {
-        self.rt.borrow_mut().add_requires(self.id, id);
+    pub fn requires(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_requires(self.id, name);
         self
     }
 
@@ -48,11 +51,6 @@ impl<T> Arg<T> {
     pub fn add_value(&mut self, span: Span, value: T) {
         self.values.push((value, span));
         self.rt.borrow_mut().add_source(self.id, span);
-    }
-
-    /// Returns the registered id of this argument.
-    pub fn id(&self) -> Id {
-        self.id
     }
 
     /// Returns all encountered values.

@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::Name;
+
 /// Customize validation [`Error`]s.
 pub trait ErrorFormatter {
     /// Formats a validation [`Error`].
@@ -50,18 +52,18 @@ pub enum Error<'a> {
 
 /// A formatter that should meet most cases.
 pub struct DefaultFormatter {
-    namespace: Option<&'static str>,
+    namespace: Option<Name>,
 }
 
 /// Builder for [`DefaultFormatter`].
 #[derive(Default)]
 pub struct DefaultFormatterBuilder {
-    namespace: Option<&'static str>,
+    namespace: Option<Name>,
 }
 
 impl DefaultFormatterBuilder {
     /// Defines the namespace for arguments and formats each argument as `namespace.argument`.
-    pub fn namespace(self, namespace: &'static str) -> Self {
+    pub fn namespace(self, namespace: Name) -> Self {
         Self {
             namespace: Some(namespace),
             ..self

@@ -12,6 +12,8 @@ pub use parser::*;
 use proc_macro2::Span;
 use syn::{parse::ParseStream, Result};
 
+type Name = &'static str;
+
 /// The user-defined container of a set of arguments.
 pub trait Args: Sized {
     type Parser: Parser<Output = Self>;

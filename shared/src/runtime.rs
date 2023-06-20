@@ -1,4 +1,4 @@
-use crate::{ArgAction, Id, ParserContext};
+use crate::{ArgAction, Name, ParserContext};
 use proc_macro2::Span;
 use std::{
     cell::RefCell,
@@ -10,8 +10,14 @@ use syn::Result;
 
 pub(crate) type Rt = Rc<RefCell<Runtime>>;
 
+/// An identifier for [`Arg`].
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct Id(usize);
+
 #[derive(Default)]
 pub(crate) struct Runtime {
+    ids: BTreeMap<Name, Id>,
+    names: BTreeMap<Id, Name>,
     action: BTreeMap<Id, ArgAction>,
     required: BTreeSet<Id>,
     conflicts_with: BTreeMap<Id, Vec<Id>>,
@@ -21,6 +27,20 @@ pub(crate) struct Runtime {
 }
 
 impl Runtime {
+    pub fn register(&mut self, name: Name) -> Id {
+        use std::collections::btree_map::Entry;
+
+        let next_id = Id(self.ids.len());
+        match self.ids.entry(name) {
+            Entry::Occupied(t) => *t.get(),
+            Entry::Vacant(t) => {
+                t.insert(next_id);
+                self.names.insert(next_id, name);
+                next_id
+            }
+        }
+    }
+
     pub fn add_action(&mut self, this: Id, action: ArgAction) {
         self.action.insert(this, action);
     }
@@ -29,12 +49,14 @@ impl Runtime {
         self.required.insert(this);
     }
 
-    pub fn add_conflicts_with(&mut self, this: Id, that: Id) {
+    pub fn add_conflicts_with(&mut self, this: Id, that: Name) {
+        let that = self.register(that);
         self.conflicts_with.entry(this).or_default().push(that);
         self.conflicts_with.entry(that).or_default().push(this);
     }
 
-    pub fn add_requires(&mut self, this: Id, that: Id) {
+    pub fn add_requires(&mut self, this: Id, that: Name) {
+        let that = self.register(that);
         self.requires.entry(this).or_default().push(that);
     }
 
@@ -50,12 +72,14 @@ impl Runtime {
         use crate::Error;
 
         let Self {
+            names,
             source,
             error,
             action,
             required,
             conflicts_with,
             requires,
+            ..
         } = self;
         let mut buffer = Buffer::<&str> {
             inner: <_>::default(),
@@ -66,7 +90,7 @@ impl Runtime {
         };
         let len = |id: &Id| source.get(id).map(Vec::len).unwrap_or(0);
         let has = |id: &Id| len(id) > 0;
-        let as_name = |id: Id| context.name(id);
+        let as_name = |id: Id| *names.get(&id).expect("undefined Id");
 
         for this in required.iter() {
             if !has(this) {
