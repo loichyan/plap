@@ -1,5 +1,5 @@
-use crate::{ast, runtime::Rt, Arg, DefaultFormatter, ErrorFormatter, Name};
-use proc_macro2::Span;
+use crate::{runtime::Rt, Arg, DefaultFormatter, ErrorFormatter, Name};
+use proc_macro2::{Span, TokenTree};
 use syn::{parse::ParseStream, Ident, Result, Token};
 
 /// Parse input stream into user-defined container.
@@ -21,26 +21,34 @@ pub trait Parser: Sized {
             }
 
             // Report unknown arguments.
-            if !self.parse_once(input)? {
-                let span = input.span();
-                let context = self.context();
-                let mut rt = context.rt.borrow_mut();
-                let err = if input.peek(Ident) {
-                    let ident = input.parse::<Ident>()?;
-                    context.format(&crate::Error::UnknownArg {
-                        this: &ident.to_string(),
-                    })
-                } else {
-                    context.format(&crate::Error::InvalidInput)
-                };
-                ast::parse_util_comma(input)?;
-                rt.add_error(span, err);
+            let span = input.span();
+            match self.parse_once(input) {
+                Ok(true) => {}
+                Ok(false) => {
+                    let context = self.context();
+                    let msg = if input.peek(Ident) {
+                        let ident = input.parse::<Ident>()?;
+                        context.format(&crate::Error::UnknownArg {
+                            this: &ident.to_string(),
+                        })
+                    } else {
+                        context.format(&crate::Error::InvalidInput)
+                    };
+                    context.rt.borrow_mut().add_error(span, msg);
+                }
+                Err(e) => {
+                    self.context().rt.borrow_mut().add_syn_error(e);
+                }
             }
 
-            if input.is_empty() {
-                break;
+            // Eat all tokens util a comma.
+            loop {
+                if input.is_empty() || input.parse::<Option<Token![,]>>()?.is_some() {
+                    break;
+                } else {
+                    input.parse::<TokenTree>()?;
+                }
             }
-            input.parse::<Token![,]>()?;
         }
         Ok(())
     }

@@ -65,7 +65,11 @@ impl Runtime {
     }
 
     pub fn add_error(&mut self, span: Span, msg: String) {
-        self.error.combine(syn::Error::new(span, msg));
+        self.add_syn_error(syn::Error::new(span, msg));
+    }
+
+    pub fn add_syn_error(&mut self, e: syn::Error) {
+        self.error.combine(e);
     }
 
     pub fn finish(&mut self, context: &ParserContext) -> Result<()> {

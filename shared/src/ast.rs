@@ -1,4 +1,3 @@
-use proc_macro2::{TokenStream, TokenTree};
 use syn::{
     braced, bracketed, parenthesized,
     parse::{Parse, ParseStream},
@@ -111,15 +110,4 @@ where
         return Err(lookahead.error());
     }
     Ok((delimiter, value))
-}
-
-pub(crate) fn parse_util_comma(input: ParseStream) -> Result<TokenStream> {
-    std::iter::from_fn(|| {
-        if input.is_empty() || input.peek(Token![,]) {
-            None
-        } else {
-            input.parse::<TokenTree>().map(Some).transpose()
-        }
-    })
-    .collect()
 }
