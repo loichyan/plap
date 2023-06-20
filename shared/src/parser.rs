@@ -23,22 +23,29 @@ pub trait Parser: Sized {
             // Report unknown arguments.
             let span = input.span();
             match self.parse_once(input) {
-                Ok(true) => {}
                 Ok(false) => {
                     let context = self.context();
                     let msg = if input.peek(Ident) {
+                        // Attempt to parse as an unknown argument
                         let ident = input.parse::<Ident>()?;
                         context.format(&crate::Error::UnknownArg {
                             this: &ident.to_string(),
                         })
                     } else {
+                        // Invalid input
                         context.format(&crate::Error::InvalidInput)
                     };
                     context.rt.borrow_mut().add_error(span, msg);
                 }
-                Err(e) => {
-                    self.context().rt.borrow_mut().add_syn_error(e);
-                }
+                // Report the error and eat all rest tokens
+                Err(e) => self.context().rt.borrow_mut().add_syn_error(e),
+                Ok(true) if input.is_empty() => break,
+                // No errors,
+                Ok(true) => match input.parse::<Token![,]>() {
+                    Ok(_) => continue,
+                    // expect a comma
+                    Err(e) => self.context().rt.borrow_mut().add_syn_error(e),
+                },
             }
 
             // Eat all tokens util a comma.
