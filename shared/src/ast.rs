@@ -24,12 +24,21 @@ where
 {
     fn parse(input: ParseStream) -> Result<Self> {
         let name = input.parse()?;
-        let (delimiter, value) = parse_delimited(input, |input| input.parse::<LitStr>()?.parse())?;
+        let (delimiter, value) = Self::parse_value(input)?;
         Ok(Self {
             name,
             delimiter,
             value,
         })
+    }
+}
+
+impl<T> NamedArg<T>
+where
+    T: Parse,
+{
+    pub fn parse_value(input: ParseStream) -> Result<(ArgDelimiter, T)> {
+        parse_delimited(input, |input| input.parse::<LitStr>()?.parse())
     }
 }
 
@@ -53,7 +62,7 @@ where
 {
     fn parse(input: ParseStream) -> Result<Self> {
         let name = input.parse()?;
-        let (delimiter, value) = parse_delimited(input, T::parse)?;
+        let (delimiter, value) = Self::parse_value(input)?;
         Ok(Self {
             name,
             delimiter,
@@ -62,12 +71,13 @@ where
     }
 }
 
-/// A grouping token of an argument.
-pub enum ArgDelimiter {
-    Paren(token::Paren),
-    Bracket(token::Bracket),
-    Brace(token::Brace),
-    Eq(Token![=]),
+impl<T> ExprArg<T>
+where
+    T: Parse,
+{
+    pub fn parse_value(input: ParseStream) -> Result<(ArgDelimiter, T)> {
+        parse_delimited(input, T::parse)
+    }
 }
 
 /// A flag argument without a value.
@@ -85,7 +95,15 @@ impl Parse for FlagArg {
     }
 }
 
-pub(crate) fn parse_delimited<T>(
+/// A grouping token of an argument.
+pub enum ArgDelimiter {
+    Paren(token::Paren),
+    Bracket(token::Bracket),
+    Brace(token::Brace),
+    Eq(Token![=]),
+}
+
+fn parse_delimited<T>(
     input: ParseStream,
     parse_eq: fn(ParseStream) -> Result<T>,
 ) -> Result<(ArgDelimiter, T)>
