@@ -1,6 +1,5 @@
-use std::fmt;
-
 use crate::Name;
+use std::fmt;
 
 /// Customize validation [`Error`]s.
 pub trait ErrorFormatter {

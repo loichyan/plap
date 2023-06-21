@@ -1,11 +1,12 @@
-mod arg;
 mod ast;
 mod error;
 mod ext;
 mod parser;
 mod runtime;
 
-pub use arg::*;
+pub mod arg;
+
+pub use arg::{Arg, ArgAction};
 pub use ast::*;
 pub use error::*;
 pub use ext::*;
