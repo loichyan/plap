@@ -1,12 +1,14 @@
 mod arg;
 mod ast;
 mod error;
+mod ext;
 mod parser;
 mod runtime;
 
 pub use arg::*;
 pub use ast::*;
 pub use error::*;
+pub use ext::*;
 pub use parser::*;
 
 use proc_macro2::Span;
