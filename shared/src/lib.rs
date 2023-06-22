@@ -22,7 +22,9 @@ pub trait Args: Sized {
     type Parser: Parser<Output = Self>;
 
     /// Gets the associated [`Parser`].
-    fn parser(node: Span) -> Self::Parser;
+    fn parser(node: Span) -> Self::Parser {
+        <Self::Parser as Parser>::with_node(node)
+    }
 
     /// Parses an input stream.
     fn parse(input: ParseStream) -> Result<Self> {

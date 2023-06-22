@@ -6,6 +6,9 @@ use syn::{parse::ParseStream, Ident, Result, Token};
 pub trait Parser: Sized {
     type Output;
 
+    /// Constructs a parser from specified node.
+    fn with_node(node: Span) -> Self;
+
     /// Returns the context of current parser.
     fn context(&self) -> &ParserContext;
 
