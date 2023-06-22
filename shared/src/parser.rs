@@ -38,16 +38,16 @@ pub trait Parser: Sized {
                         // Invalid input
                         context.format(&crate::Error::InvalidInput)
                     };
-                    context.rt.borrow_mut().add_error(span, msg);
+                    context.error(syn::Error::new(span, msg));
                 }
                 // Report the error and eat all rest tokens
-                Err(e) => self.context().rt.borrow_mut().add_syn_error(e),
+                Err(e) => self.context().error(e),
                 Ok(true) if input.is_empty() => break,
                 // No errors,
                 Ok(true) => match input.parse::<Token![,]>() {
                     Ok(_) => continue,
                     // expect a comma
-                    Err(e) => self.context().rt.borrow_mut().add_syn_error(e),
+                    Err(e) => self.context().error(e),
                 },
             }
 
@@ -63,7 +63,8 @@ pub trait Parser: Sized {
         Ok(())
     }
 
-    /// Completes parsing and returns errors that occurred during parsing.
+    /// Completes parsing, validates results and returns errors that occurred
+    /// during parsing/validating.
     ///
     /// **Note:** This function should combine all encountered validation errors into
     /// a single error.
@@ -102,12 +103,19 @@ impl ParserContext {
         self.formatter.fmt(err)
     }
 
+    /// Saves an error which will be reported in [`finish`].
+    ///
+    /// [`finish`]: Self::finish
+    pub fn error(&self, e: syn::Error) {
+        self.rt.borrow_mut().add_error(e);
+    }
+
     /// Completes parsing and validates arguments.
     ///
     /// **Note:** This function should be called before accessing the value(s)
     /// of an [`Arg`] in [`Parser::finish`] to ensure all arguments are valid.
     pub fn finish(self) -> Result<()> {
-        self.rt.borrow_mut().finish(&self)
+        self.rt.take().finish(self)
     }
 }
 

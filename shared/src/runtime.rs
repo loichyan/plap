@@ -70,24 +70,20 @@ impl Runtime {
         self.source.entry(this).or_default().push(span);
     }
 
-    pub fn add_error(&mut self, span: Span, msg: String) {
-        self.add_syn_error(syn::Error::new(span, msg));
-    }
-
-    pub fn add_syn_error(&mut self, e: syn::Error) {
+    pub fn add_error(&mut self, e: syn::Error) {
         self.error.combine(e);
     }
 
-    pub fn finish(&mut self, context: &ParserContext) -> Result<()> {
+    pub fn finish(self, context: ParserContext) -> Result<()> {
         use crate::Error;
 
         let Self {
             names,
             source,
-            error,
+            mut error,
             action,
             required,
-            conflicts_with,
+            mut conflicts_with,
             requires,
             group,
             ..
