@@ -4,9 +4,15 @@ use syn::{
     Result,
 };
 
+/// An extension trait for [`ParseBuffer`].
 pub trait ParseStreamExt {
+    /// Parses as a [`NamedArg`] and returns its value.
     fn parse_named_arg<T: Parse>(&self) -> Result<T>;
+
+    /// Parses as a [`ExprArg`] and returns its value.
     fn parse_expr_arg<T: Parse>(&self) -> Result<T>;
+
+    /// Parses as a [`FlagArg`] and returns `true`.
     fn parse_flag_arg(&self) -> Result<bool>;
 }
 

@@ -97,6 +97,7 @@ impl<T> Arg<T> {
         }
     }
 
+    /// Returns the only optional value.
     pub fn option(&self) -> Option<&T> {
         assert!(self.values.len() <= 1);
         self.values().next()
@@ -134,8 +135,10 @@ impl<T> IntoIterator for Arg<T> {
     }
 }
 
-macro_rules! define_into_iter {
-    ($name:ident [$item:ty] => self.$inner:ident $($next:tt)*) => {
+macro_rules! define_iter {
+    () => {};
+    ($(#[$attr:meta])* $name:ident [$item:ty] => self.$inner:ident $(.$mem:tt)? ; $($rest:tt)*) => {
+        $(#[$attr])*
         pub struct $name<T> {
             $inner: <Vec<(T, Span)> as IntoIterator>::IntoIter,
         }
@@ -144,14 +147,14 @@ macro_rules! define_into_iter {
             type Item = $item;
 
             fn next(&mut self) -> Option<Self::Item> {
-                self.$inner $($next)*
+                self.$inner.next() $(.map(|t| t.$mem))*
             }
         }
 
+        define_iter!($($rest)*);
     };
-}
-macro_rules! define_iter {
-    ($name:ident [$item:ty] => self.$inner:ident $($next:tt)*) => {
+    ($(#[$attr:meta])* & $name:ident [$item:ty] => self.$inner:ident $(.$mem:tt)? ; $($rest:tt)*) => {
+        $(#[$attr])*
         pub struct $name<'a, T> {
             $inner: <&'a [(T, Span)] as IntoIterator>::IntoIter,
         }
@@ -160,16 +163,29 @@ macro_rules! define_iter {
             type Item = &'a $item;
 
             fn next(&mut self) -> Option<Self::Item> {
-                self.$inner $($next)*
+                self.$inner.next() $(.map(|t| &t.$mem))*
             }
         }
 
+        define_iter!($($rest)*);
     };
 }
+define_iter!(
+    /// An iterator over the values and spans of an [`Arg`].
+    IntoIter [(T, Span)] => self.inner;
 
-define_into_iter!(IntoIter [(T, Span)] => self.inner.next());
-define_into_iter!(IntoValues [T] => self.inner.next().map(|t| t.0));
-define_into_iter!(IntoSpans [Span] => self.inner.next().map(|t| t.1));
-define_iter!(Iter [(T, Span)] => self.inner.next());
-define_iter!(Values [T] => self.inner.next().map(|t| &t.0));
-define_iter!(Spans [Span] => self.inner.next().map(|t| &t.1));
+    /// An iterator over the values of an [`Arg`].
+    IntoValues [T] => self.inner.0;
+
+    /// An iterator over the spans of an [`Arg`].
+    IntoSpans [Span] => self.inner.1;
+
+    /// An iterator over the values and spans of an [`Arg`].
+    & Iter [(T, Span)] => self.inner;
+
+    /// An iterator over the values of an [`Arg`].
+    & Values [T] => self.inner.0;
+
+    /// An iterator over the spans of an [`Arg`].
+    & Spans [Span] => self.inner.1;
+);

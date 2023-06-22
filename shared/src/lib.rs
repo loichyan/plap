@@ -6,11 +6,14 @@ mod runtime;
 
 pub mod arg;
 
-pub use arg::{Arg, ArgAction};
-pub use ast::*;
-pub use error::*;
-pub use ext::*;
-pub use parser::*;
+#[doc(inline)]
+pub use {
+    arg::{Arg, ArgAction},
+    ast::*,
+    error::*,
+    ext::*,
+    parser::*,
+};
 
 use proc_macro2::Span;
 use syn::{parse::ParseStream, Result};
