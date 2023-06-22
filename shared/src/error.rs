@@ -30,22 +30,17 @@ where
 #[non_exhaustive]
 pub enum Error<'a> {
     /// An argument is supplied multiple times.
-    DuplicateArg {
-        this: &'a str,
-    },
+    DuplicateArg { name: &'a str },
     /// An argument conflicts with others.
     ConflictArgs {
-        this: &'a str,
-        those: &'a [&'a str],
+        name: &'a str,
+        conflicts: &'a [&'a str],
     },
     /// An argument misses requirements.
-    MissingRequirements {
-        those: &'a [&'a str],
-    },
+    MissingRequirements { missings: &'a [&'a str] },
     /// An argument is undefined.
-    UnknownArg {
-        this: &'a str,
-    },
+    UnknownArg { name: &'a str },
+    /// Unexpected input tokens.
     InvalidInput,
 }
 
@@ -103,23 +98,23 @@ impl DefaultFormatter {
 impl ErrorFormatter for DefaultFormatter {
     fn fmt(&self, err: &Error) -> String {
         match err {
-            &Error::DuplicateArg { this } => {
-                format!("{} is duplicate", FmtArg(self.namespace, this))
+            &Error::DuplicateArg { name } => {
+                format!("{} is duplicate", FmtArg(self.namespace, name))
             }
-            &Error::ConflictArgs { this, those } => format!(
+            &Error::ConflictArgs { name, conflicts } => format!(
                 "{} conflicts with {}",
-                FmtArg(self.namespace, this),
-                FmtArgs(self.namespace, those),
+                FmtArg(self.namespace, name),
+                FmtArgs(self.namespace, conflicts),
             ),
-            &Error::MissingRequirements { those } => {
+            &Error::MissingRequirements { missings } => {
                 format!(
                     "{} {} required",
-                    if those.len() > 1 { "are" } else { "is" },
-                    FmtArgs(self.namespace, those),
+                    if missings.len() > 1 { "are" } else { "is" },
+                    FmtArgs(self.namespace, missings),
                 )
             }
-            &Error::UnknownArg { this } => {
-                format!("{} is unknown", FmtArg(self.namespace, this))
+            &Error::UnknownArg { name } => {
+                format!("{} is unknown", FmtArg(self.namespace, name))
             }
             &Error::InvalidInput => {
                 format!("invalid input")

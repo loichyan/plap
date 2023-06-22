@@ -30,9 +30,9 @@ pub trait Parser: Sized {
                     let context = self.context();
                     let msg = if input.peek(Ident) {
                         // Attempt to parse as an unknown argument
-                        let ident = input.parse::<Ident>()?;
+                        let name = input.parse::<Ident>()?;
                         context.format(&crate::Error::UnknownArg {
-                            this: &ident.to_string(),
+                            name: &name.to_string(),
                         })
                     } else {
                         // Invalid input

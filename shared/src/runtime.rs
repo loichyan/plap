@@ -42,32 +42,32 @@ impl Runtime {
         }
     }
 
-    pub fn add_action(&mut self, this: Id, action: ArgAction) {
-        self.action.insert(this, action);
+    pub fn add_action(&mut self, id: Id, action: ArgAction) {
+        self.action.insert(id, action);
     }
 
-    pub fn add_required(&mut self, this: Id) {
-        self.required.insert(this);
+    pub fn add_required(&mut self, id: Id) {
+        self.required.insert(id);
     }
 
-    pub fn add_conflicts_with(&mut self, this: Id, that: Name) {
-        let that = self.register(that);
-        self.conflicts_with.entry(this).or_default().push(that);
-        self.conflicts_with.entry(that).or_default().push(this);
+    pub fn add_conflicts_with(&mut self, id: Id, conflict: Name) {
+        let conflict = self.register(conflict);
+        self.conflicts_with.entry(id).or_default().push(conflict);
+        self.conflicts_with.entry(conflict).or_default().push(id);
     }
 
-    pub fn add_requires(&mut self, this: Id, that: Name) {
-        let that = self.register(that);
-        self.requires.entry(this).or_default().push(that);
+    pub fn add_requires(&mut self, id: Id, requirement: Name) {
+        let requirement = self.register(requirement);
+        self.requires.entry(id).or_default().push(requirement);
     }
 
-    pub fn add_group(&mut self, this: Id, group: Name) {
+    pub fn add_group(&mut self, id: Id, group: Name) {
         let group = self.register(group);
-        self.requires.entry(group).or_default().push(this);
+        self.requires.entry(group).or_default().push(id);
     }
 
-    pub fn add_source(&mut self, this: Id, span: Span) {
-        self.source.entry(this).or_default().push(span);
+    pub fn add_source(&mut self, id: Id, span: Span) {
+        self.source.entry(id).or_default().push(span);
     }
 
     pub fn add_error(&mut self, e: syn::Error) {
@@ -109,24 +109,24 @@ impl Runtime {
             }
         }
 
-        for this in required.iter() {
-            if !has(this) {
+        for id in required.iter() {
+            if !has(id) {
                 add_error(
                     context.node(),
                     Error::MissingRequirements {
-                        those: &[as_name(*this)],
+                        missings: &[as_name(*id)],
                     },
                 );
             }
         }
 
-        for (this, action) in action.iter() {
-            if let Some(spans) = source.get(this) {
+        for (id, action) in action.iter() {
+            if let Some(spans) = source.get(id) {
                 match action {
                     ArgAction::Set if spans.len() > 1 => {
-                        let this = as_name(*this);
+                        let name = as_name(*id);
                         for span in spans {
-                            add_error(*span, Error::DuplicateArg { this });
+                            add_error(*span, Error::DuplicateArg { name });
                         }
                     }
                     _ => {}
@@ -134,36 +134,36 @@ impl Runtime {
             }
         }
 
-        for (this, conflicts) in conflicts_with.iter() {
-            if let Some(spans) = source.get(this) {
+        for (id, conflicts) in conflicts_with.iter() {
+            if let Some(spans) = source.get(id) {
                 debug_assert!(!spans.is_empty());
                 let mut buffer = buffer.acquire();
                 buffer.extend(conflicts.iter().copied().filter(has).map(as_name));
                 if buffer.is_empty() {
                     continue;
                 }
-                let this = as_name(*this);
+                let name = as_name(*id);
                 for span in spans.iter() {
                     add_error(
                         *span,
                         Error::ConflictArgs {
-                            this,
-                            those: &buffer,
+                            name,
+                            conflicts: &buffer,
                         },
                     );
                 }
             }
         }
 
-        for (this, requirements) in requires.iter() {
-            if let Some(spans) = source.get(this) {
+        for (id, requirements) in requires.iter() {
+            if let Some(spans) = source.get(id) {
                 let mut buffer = buffer.acquire();
                 buffer.extend(requirements.iter().copied().filter(has).map(as_name));
                 if buffer.is_empty() {
                     continue;
                 }
                 for span in spans.iter() {
-                    add_error(*span, Error::MissingRequirements { those: &buffer });
+                    add_error(*span, Error::MissingRequirements { missings: &buffer });
                 }
             }
         }
