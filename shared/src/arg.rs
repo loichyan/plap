@@ -14,9 +14,9 @@ pub struct Arg<T> {
 /// Behavior of arguments when they are encountered while parsing.
 #[non_exhaustive]
 pub enum ArgAction {
-    /// Returns at most one value in [`Arg::finish`].
+    /// Returns at most one value in [`Arg`].
     Set,
-    /// Returns all associated values in [`Arg::finish`].
+    /// Returns all associated values in [`Arg`].
     Append,
 }
 
@@ -35,10 +35,7 @@ impl<T> Arg<T> {
         self
     }
 
-    /// Specifies that the argument must be present. Returns at least one value
-    /// in [`finish`].
-    ///
-    /// [`finish`]: Self::finish
+    /// Specifies that the argument must be present and returns at least one value.
     pub fn required(self) -> Self {
         self.rt.borrow_mut().add_required(self.id);
         self

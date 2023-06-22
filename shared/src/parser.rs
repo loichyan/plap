@@ -101,8 +101,8 @@ impl ParserContext {
 
     /// Completes parsing and validates arguments.
     ///
-    /// **Note:** This function should be called before [`Arg::finish`] in
-    /// [`Parser::finish`] to ensure all arguments are valid.
+    /// **Note:** This function should be called before accessing the value(s)
+    /// of an [`Arg`] in [`Parser::finish`] to ensure all arguments are valid.
     pub fn finish(self) -> Result<()> {
         self.rt.borrow_mut().finish(&self)
     }
