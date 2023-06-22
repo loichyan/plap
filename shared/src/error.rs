@@ -40,6 +40,8 @@ pub enum Error<'a> {
     MissingRequirements { missings: &'a [&'a str] },
     /// An argument is undefined.
     UnknownArg { name: &'a str },
+    /// An argument is unexpected in some node.
+    UnexpectedArg { name: &'a str },
     /// Unexpected input tokens.
     InvalidInput,
 }
@@ -98,25 +100,31 @@ impl DefaultFormatter {
 impl ErrorFormatter for DefaultFormatter {
     fn fmt(&self, err: &Error) -> String {
         match err {
-            &Error::DuplicateArg { name } => {
+            Error::DuplicateArg { name } => {
                 format!("{} is duplicate", FmtArg(self.namespace, name))
             }
-            &Error::ConflictArgs { name, conflicts } => format!(
+            Error::ConflictArgs { name, conflicts } => format!(
                 "{} conflicts with {}",
                 FmtArg(self.namespace, name),
                 FmtArgs(self.namespace, conflicts),
             ),
-            &Error::MissingRequirements { missings } => {
+            Error::MissingRequirements { missings } => {
                 format!(
                     "{} {} required",
                     if missings.len() > 1 { "are" } else { "is" },
                     FmtArgs(self.namespace, missings),
                 )
             }
-            &Error::UnknownArg { name } => {
+            Error::UnknownArg { name } => {
                 format!("{} is unknown", FmtArg(self.namespace, name))
             }
-            &Error::InvalidInput => {
+            Error::UnexpectedArg { name } => {
+                format!(
+                    "{} is not allowed in this node",
+                    FmtArg(self.namespace, name),
+                )
+            }
+            Error::InvalidInput => {
                 format!("invalid input")
             }
         }

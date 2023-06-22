@@ -66,6 +66,11 @@ impl<T> Arg<T> {
         self.rt.borrow_mut().add_source(self.id, span);
     }
 
+    /// Marks this argument as unexpected.
+    pub fn set_unexpected(&mut self) {
+        self.rt.borrow_mut().add_unexpected(self.id);
+    }
+
     /// Returns the number if encountered values.
     pub fn len(&self) -> usize {
         self.values.len()

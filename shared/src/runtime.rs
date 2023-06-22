@@ -23,6 +23,7 @@ pub(crate) struct Runtime {
     conflicts_with: BTreeMap<Id, Vec<Id>>,
     requires: BTreeMap<Id, Vec<Id>>,
     group: BTreeMap<Id, Vec<Id>>,
+    unexpcted: Vec<Id>,
     source: BTreeMap<Id, Vec<Span>>,
     error: ErrorCollector,
 }
@@ -66,6 +67,10 @@ impl Runtime {
         self.requires.entry(group).or_default().push(id);
     }
 
+    pub fn add_unexpected(&mut self, id: Id) {
+        self.unexpcted.push(id);
+    }
+
     pub fn add_source(&mut self, id: Id, span: Span) {
         self.source.entry(id).or_default().push(span);
     }
@@ -78,6 +83,7 @@ impl Runtime {
         use crate::Error;
 
         let Self {
+            ids: _,
             names,
             source,
             mut error,
@@ -86,7 +92,7 @@ impl Runtime {
             mut conflicts_with,
             requires,
             group,
-            ..
+            unexpcted,
         } = self;
         let mut buffer = Buffer::<&str> {
             inner: <_>::default(),
@@ -100,7 +106,7 @@ impl Runtime {
         let as_name = |id: Id| *names.get(&id).expect("undefined Id");
 
         // Update relationships from groups
-        for (_, members) in group.iter() {
+        for (_, members) in group {
             for i in 0..members.len() {
                 let this = members[i];
                 for &that in members[0..i].iter().chain(members[i + 1..].iter()) {
@@ -109,22 +115,22 @@ impl Runtime {
             }
         }
 
-        for id in required.iter() {
-            if !has(id) {
+        for id in required {
+            if !has(&id) {
                 add_error(
                     context.node(),
                     Error::MissingRequirements {
-                        missings: &[as_name(*id)],
+                        missings: &[as_name(id)],
                     },
                 );
             }
         }
 
-        for (id, action) in action.iter() {
-            if let Some(spans) = source.get(id) {
+        for (id, action) in action {
+            if let Some(spans) = source.get(&id) {
                 match action {
                     ArgAction::Set if spans.len() > 1 => {
-                        let name = as_name(*id);
+                        let name = as_name(id);
                         for span in spans {
                             add_error(*span, Error::DuplicateArg { name });
                         }
@@ -134,15 +140,15 @@ impl Runtime {
             }
         }
 
-        for (id, conflicts) in conflicts_with.iter() {
-            if let Some(spans) = source.get(id) {
+        for (id, conflicts) in conflicts_with {
+            if let Some(spans) = source.get(&id) {
                 debug_assert!(!spans.is_empty());
                 let mut buffer = buffer.acquire();
-                buffer.extend(conflicts.iter().copied().filter(has).map(as_name));
+                buffer.extend(conflicts.into_iter().filter(has).map(as_name));
                 if buffer.is_empty() {
                     continue;
                 }
-                let name = as_name(*id);
+                let name = as_name(id);
                 for span in spans.iter() {
                     add_error(
                         *span,
@@ -155,15 +161,27 @@ impl Runtime {
             }
         }
 
-        for (id, requirements) in requires.iter() {
-            if let Some(spans) = source.get(id) {
+        for (id, requirements) in requires {
+            if let Some(spans) = source.get(&id) {
                 let mut buffer = buffer.acquire();
-                buffer.extend(requirements.iter().copied().filter(has).map(as_name));
+                buffer.extend(requirements.into_iter().filter(has).map(as_name));
                 if buffer.is_empty() {
                     continue;
                 }
                 for span in spans.iter() {
                     add_error(*span, Error::MissingRequirements { missings: &buffer });
+                }
+            }
+        }
+
+        for id in unexpcted {
+            if let Some(spans) = source.get(&id) {
+                if spans.is_empty() {
+                    continue;
+                }
+                let name = as_name(id);
+                for span in spans.iter() {
+                    add_error(*span, Error::UnexpectedArg { name });
                 }
             }
         }
