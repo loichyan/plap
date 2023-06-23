@@ -164,7 +164,7 @@ impl Runtime {
             .for_each(|((this, spans), that)| {
                 if let Some(members) = groups.get(that) {
                     // An argument requires any of a member in a group.
-                    if !members.iter().all(supplied) {
+                    if !members.iter().any(supplied) {
                         add_error(
                             spans,
                             Error::MissingRequired {
