@@ -114,7 +114,7 @@ impl Runtime {
                 error.combine(syn::Error::new(*span, &msg));
             }
         };
-        let to_name = |id: &Id| *names.get(&id).expect("undefined `Id`");
+        let to_name = |id: &Id| *names.get(id).expect("undefined `Id`");
         let supplied = |id: &Id| sources.get(id).is_some();
         let with_spans = _with_spans(|id| sources.get(id).map(|spans| (id, spans.as_slice())));
         let flat_group = _flat_group(|id| {
@@ -176,7 +176,7 @@ impl Runtime {
                         },
                     );
                 }
-            } else if !supplied(&that) {
+            } else if !supplied(that) {
                 add_error(
                     spans,
                     Error::MissingRequired {
@@ -208,7 +208,7 @@ impl Runtime {
 
         // Ensure all conflict arguments/groups are not supplied.
         for (this, spans, that) in conflicts.iter().flat_map(flat_pair) {
-            let this = to_name(&this);
+            let this = to_name(this);
             for that in flat_group(that).filter(|id| supplied(*id)) {
                 add_error(
                     spans,

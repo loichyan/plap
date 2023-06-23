@@ -62,7 +62,6 @@ impl DefaultFormatterBuilder {
     pub fn namespace(self, namespace: Name) -> Self {
         Self {
             namespace: Some(namespace),
-            ..self
         }
     }
 
@@ -140,9 +139,7 @@ impl ErrorFormatter for DefaultFormatter {
             Error::UnknownArg { this } => {
                 format!("{} is unknown", self.fmt_arg(this))
             }
-            Error::InvalidInput => {
-                format!("invalid input")
-            }
+            Error::InvalidInput => "invalid input".to_owned(),
         }
     }
 }
