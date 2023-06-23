@@ -122,6 +122,11 @@ impl<T> Arg<T> {
         }
     }
 
+    /// Consumes itself and collects all values into a [`Vec`].
+    pub fn into_vec(self) -> Vec<T> {
+        self.into_values().collect()
+    }
+
     /// Consumes itself and returns the only optional value.
     pub fn into_option(self) -> Option<T> {
         assert!(self.values.len() <= 1);
