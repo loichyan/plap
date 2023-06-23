@@ -24,9 +24,14 @@ type Name = &'static str;
 pub trait Args: Sized {
     type Parser: Parser<Output = Self>;
 
-    /// Gets the associated [`Parser`].
+    /// Gets the associated [`Parser`] with the default configuration.
     fn parser(node: Span) -> Self::Parser {
-        <Self::Parser as Parser>::with_node(node)
+        Self::parser_from(ParserContext::new(node))
+    }
+
+    /// Gets the associated [`Parser`] with the pre-configured context.
+    fn parser_from(context: ParserContext) -> Self::Parser {
+        <Self::Parser as Parser>::from_context(context)
     }
 
     /// Parses an input stream.

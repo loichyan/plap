@@ -6,11 +6,14 @@ use syn::{parse::ParseStream, Ident, Result, Token};
 pub trait Parser: Sized {
     type Output;
 
-    /// Constructs a parser from specified node.
-    fn with_node(node: Span) -> Self;
+    /// Constructs a parser from the pre-configured context.
+    fn from_context(context: ParserContext) -> Self;
 
     /// Returns the context of current parser.
     fn context(&self) -> &ParserContext;
+
+    /// Returns the mutable context of current parser.
+    fn context_mut(&mut self) -> &mut ParserContext;
 
     /// Attempts to parse an encountered argument and returns `false` if the input
     /// stream cannot be parsed.
@@ -27,7 +30,7 @@ pub trait Parser: Sized {
             let span = input.span();
             match self.parse_once(input) {
                 Ok(false) => {
-                    let context = self.context();
+                    let context = self.context_mut();
                     let msg = if input.peek(Ident) {
                         // Attempt to parse as an unknown argument
                         let name = input.parse::<Ident>()?;
@@ -41,13 +44,13 @@ pub trait Parser: Sized {
                     context.error(syn::Error::new(span, msg));
                 }
                 // Report the error and eat all rest tokens
-                Err(e) => self.context().error(e),
+                Err(e) => self.context_mut().error(e),
                 Ok(true) if input.is_empty() => break,
                 // No errors,
                 Ok(true) => match input.parse::<Token![,]>() {
                     Ok(_) => continue,
                     // expect a comma
-                    Err(e) => self.context().error(e),
+                    Err(e) => self.context_mut().error(e),
                 },
             }
 
@@ -103,10 +106,16 @@ impl ParserContext {
         self.formatter.fmt(err)
     }
 
+    /// Registers an argument.
+    pub fn arg<T>(&mut self, name: Name) -> Arg<T> {
+        let id = self.rt.borrow_mut().register(name);
+        Arg::new(id, self.rt.clone())
+    }
+
     /// Saves an error which will be reported in [`finish`].
     ///
     /// [`finish`]: Self::finish
-    pub fn error(&self, e: syn::Error) {
+    pub fn error(&mut self, e: syn::Error) {
         self.rt.borrow_mut().add_error(e);
     }
 
@@ -124,7 +133,6 @@ impl ParserContext {
 pub struct ParserContextBuilder {
     node: Option<Span>,
     formatter: Option<Box<dyn ErrorFormatter>>,
-    rt: Rt,
 }
 
 impl ParserContextBuilder {
@@ -144,12 +152,6 @@ impl ParserContextBuilder {
         }
     }
 
-    /// Registers an argument.
-    pub fn arg<T>(&mut self, name: Name) -> Arg<T> {
-        let id = self.rt.borrow_mut().register(name);
-        Arg::new(id, self.rt.clone())
-    }
-
     /// Consumes the builder and constructs [`ParserContext`].
     ///
     /// # Panics
@@ -158,15 +160,11 @@ impl ParserContextBuilder {
     ///
     /// [`node`]: Self::node
     pub fn build(self) -> ParserContext {
-        let Self {
-            node,
-            formatter,
-            rt,
-        } = self;
+        let Self { node, formatter } = self;
         ParserContext {
             node: node.expect("`ParserContext::node` is required"),
             formatter: formatter.unwrap_or_else(|| Box::new(DefaultFormatter::default())),
-            rt,
+            rt: <_>::default(),
         }
     }
 }
