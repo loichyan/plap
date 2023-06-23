@@ -110,106 +110,105 @@ impl Runtime {
         let mut buffer = Buffer::<&str>::default();
         let mut add_error = |spans: &[Span], err: crate::Error| {
             let msg = context.format(&err);
-            for span in spans {
-                error.combine(syn::Error::new(*span, &msg));
-            }
+            spans
+                .iter()
+                .for_each(|span| error.combine(syn::Error::new(*span, &msg)));
         };
         let to_name = |id: &Id| *names.get(id).expect("undefined `Id`");
         let supplied = |id: &Id| sources.get(id).is_some();
-        let with_spans = _with_spans(|id| sources.get(id).map(|spans| (id, spans.as_slice())));
         let flat_group = _flat_group(|id| {
             if let Some(members) = groups.get(id) {
-                // this is a group,
-                // assumes no nested groups
+                // Flatten a group (assume no nested groups).
                 Either::Left(members.iter())
             } else {
-                // this is an argument
+                // This is an argument.
                 Either::Right(std::iter::once(id))
             }
         });
-        let flat_pair = _flat_pair(|(this, those)| {
+        // Convert Id to Name and ignore absent arguments.
+        let to_sources =
+            _to_sources(|id| sources.get(id).map(|spans| (to_name(id), spans.as_slice())));
+        let flat_key_group = _flag_key_group(|(this, those)| {
+            // Flatten group members from keys,
             flat_group(this)
-                // skip not supplied arguments
-                .filter_map(with_spans)
-                // flatten the list of ids
-                .flat_map(|(this, spans)| those.iter().map(move |that| (this, spans, that)))
+                // get present sources,
+                .filter_map(to_sources)
+                // and flatten values.
+                .flat_map(|s| those.iter().map(move |that| (s, that)))
         });
 
-        // Ensure the number of values meet the specified action.
-        for (this, spans, action) in actions
+        // Ensure the number of values meets the specified action.
+        actions
             .iter()
-            .filter_map(|(this, action)| sources.get(this).map(|spans| (this, spans, action)))
-        {
-            match action {
-                ArgAction::Set if spans.len() > 1 => {
-                    add_error(
-                        spans,
-                        Error::DuplicateArg {
-                            this: to_name(this),
-                        },
-                    );
-                }
+            .filter_map(|(this, action)| {
+                to_sources(this).map(|(this, spans)| (this, spans, action))
+            })
+            .for_each(|(this, spans, action)| match action {
+                ArgAction::Set if spans.len() > 1 => add_error(spans, Error::DuplicateArg { this }),
                 _ => {}
-            }
-        }
+            });
 
         // Ensure all required arguments/groups are supplied.
         let node = [context.node()];
-        for (this, spans, that) in std::iter::empty()
-            // required by this node
-            .chain(required.iter().map(|that| (None, &node as &[Span], that)))
+        // required by this node
+        required
+            .iter()
+            .map(|that| ((None, &node as &[Span]), that))
             // required by an argument
             .chain(
                 requirements
                     .iter()
-                    .flat_map(flat_pair)
-                    .map(|(this, spans, that)| (Some(this), spans, that)),
+                    .flat_map(flat_key_group)
+                    .map(|((this, spans), that)| ((Some(this), spans), that)),
             )
-        {
-            if let Some(members) = groups.get(that) {
-                if !members.iter().all(supplied) {
+            .for_each(|((this, spans), that)| {
+                if let Some(members) = groups.get(that) {
+                    // An argument requires any of a member in a group.
+                    if !members.iter().all(supplied) {
+                        add_error(
+                            spans,
+                            Error::MissingRequired {
+                                this,
+                                required: &*buffer.acquire(members.iter().map(to_name)),
+                            },
+                        );
+                    }
+                } else if !supplied(that) {
                     add_error(
                         spans,
                         Error::MissingRequired {
-                            this: this.map(to_name),
-                            required: &*buffer.acquire(members.iter().map(to_name)),
+                            this,
+                            required: &[to_name(that)],
                         },
                     );
                 }
-            } else if !supplied(that) {
-                add_error(
-                    spans,
-                    Error::MissingRequired {
-                        this: this.map(to_name),
-                        required: &[to_name(that)],
-                    },
-                );
-            }
-        }
+            });
 
         // Arguments in a group conflict with each other.
         for (_, members) in groups.iter() {
-            for (i, this, spans) in members
+            members
                 .iter()
                 .enumerate()
-                .filter_map(|(i, this)| sources.get(this).map(|spans| (i, this, spans)))
-            {
-                let this = to_name(this);
-                for conflict in members[0..i]
-                    .iter()
-                    .chain(members[i + 1..].iter())
-                    .filter(|id| supplied(*id))
-                    .map(to_name)
-                {
-                    add_error(spans, Error::ArgConflict { this, conflict });
-                }
-            }
+                .filter_map(|(i, this)| to_sources(this).map(|s| (i, s)))
+                .for_each(|(i, (this, spans))| {
+                    members[0..i]
+                        .iter()
+                        .chain(members[i + 1..].iter())
+                        .filter(|id| supplied(*id))
+                        .map(to_name)
+                        .for_each(|conflict| {
+                            add_error(spans, Error::ArgConflict { this, conflict });
+                        });
+                });
         }
 
         // Ensure all conflict arguments/groups are not supplied.
-        for (this, spans, that) in conflicts.iter().flat_map(flat_pair) {
-            let this = to_name(this);
-            for that in flat_group(that).filter(|id| supplied(*id)) {
+        conflicts
+            .iter()
+            .flat_map(flat_key_group)
+            // Flatten values (an argument conflicts with each argument in a group).
+            .flat_map(|(s, that)| flat_group(that).map(move |that| (s, that)))
+            .for_each(|((this, spans), that)| {
                 add_error(
                     spans,
                     Error::ArgConflict {
@@ -217,30 +216,23 @@ impl Runtime {
                         conflict: to_name(that),
                     },
                 );
-            }
-        }
+            });
 
         // Reports unexpected arguments/groups.
-        for (this, spans) in unexpected
+        unexpected
             .iter()
+            // Every argument in a group is unexpected.
             .flat_map(flat_group)
-            .filter_map(with_spans)
-        {
-            add_error(
-                spans,
-                Error::UnexpectedArg {
-                    this: to_name(this),
-                },
-            );
-        }
+            .filter_map(to_sources)
+            .for_each(|(this, spans)| add_error(spans, Error::UnexpectedArg { this }));
 
         error.take().map_or(Ok(()), Err)
     }
 }
 
-fn _with_spans<'a, F>(f: F) -> F
+fn _to_sources<'a, F>(f: F) -> F
 where
-    F: Fn(&'a Id) -> Option<(&'a Id, &'a [Span])>,
+    F: Fn(&'a Id) -> Option<(&'a str, &'a [Span])>,
 {
     f
 }
@@ -253,9 +245,9 @@ where
     f
 }
 
-fn _flat_pair<'a, I, F>(f: F) -> F
+fn _flag_key_group<'a, I, F>(f: F) -> F
 where
-    I: 'a + Iterator<Item = (&'a Id, &'a [Span], &'a Id)>,
+    I: 'a + Iterator<Item = ((&'a str, &'a [Span]), &'a Id)>,
     F: Fn((&'a Id, &'a Vec<Id>)) -> I,
 {
     f
