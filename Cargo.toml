@@ -18,5 +18,4 @@ plap-macro = { version = "=0.0.0", path = "macro" }
 plap-shared = { version = "=0.0.0", path = "shared" }
 
 [dev-dependencies]
-thiserror = "1.0"
 trybuild = "1.0"
