@@ -158,24 +158,19 @@ impl fmt::Display for FmtArg<'_> {
 struct FmtArgs<'a>(&'a DefaultFormatter, &'a [&'a str]);
 impl<'a> fmt::Display for FmtArgs<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let FmtArgs(fm, grp) = self;
-        match (grp.get(0), grp.get(1)) {
-            (Some(n1), None) => {
-                write!(f, "{}", fm.fmt_arg(n1))
-            }
-            (Some(n1), Some(n2)) => {
-                write!(f, "{} or {}", fm.fmt_arg(n1), fm.fmt_arg(n2))
-            }
-            _ => {
-                let mut iter = grp.iter();
-                if let Some(arg) = iter.next() {
-                    write!(f, "one of {}", fm.fmt_arg(arg))?;
-                }
-                for arg in iter {
+        let FmtArgs(fm, g) = self;
+        match g.len() {
+            0 => {}
+            1 => write!(f, "{}", fm.fmt_arg(g[0]))?,
+            2 => write!(f, "{} or {}", fm.fmt_arg(g[0]), fm.fmt_arg(g[1]))?,
+            n => {
+                write!(f, "one of {}", fm.fmt_arg(g[0]))?;
+                for arg in g[1..n - 1].iter() {
                     write!(f, ", {}", fm.fmt_arg(arg))?;
                 }
-                Ok(())
+                write!(f, " or {}", fm.fmt_arg(g[n - 1]))?;
             }
         }
+        Ok(())
     }
 }
