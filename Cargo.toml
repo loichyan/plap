@@ -11,7 +11,7 @@ rust-version = "1.56"
 
 description = "An argument parser for proc-macros."
 readme = "README.md"
-repository = "https://github.com/loichyan/shared"
+repository = "https://github.com/loichyan/plap"
 
 [dependencies]
 plap-macro = { version = "=0.0.0", path = "macro" }
