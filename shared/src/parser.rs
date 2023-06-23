@@ -113,7 +113,7 @@ impl ParserContext {
     }
 
     /// Registers a group.
-    pub fn group<T>(&mut self, name: Name) -> ArgGroup {
+    pub fn group(&mut self, name: Name) -> ArgGroup {
         let id = self.rt.borrow_mut().register(name);
         ArgGroup::new(id, self.rt.clone())
     }
