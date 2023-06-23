@@ -30,18 +30,18 @@ where
 #[non_exhaustive]
 pub enum Error<'a> {
     /// An argument is supplied multiple times.
-    DuplicateArg { name: &'a str },
-    /// An argument conflicts with others.
-    ConflictArgs {
-        name: &'a str,
-        conflicts: &'a [&'a str],
+    DuplicateArg { this: &'a str },
+    /// Any of required arguments is not supplied.
+    MissingRequired {
+        this: Option<&'a str>,
+        required: &'a [&'a str],
     },
-    /// An argument misses requirements.
-    MissingRequirements { missings: &'a [&'a str] },
-    /// An argument is undefined.
-    UnknownArg { name: &'a str },
+    /// An argument conflicts with another.
+    ArgConflict { this: &'a str, conflict: &'a str },
     /// An argument is unexpected in some node.
-    UnexpectedArg { name: &'a str },
+    UnexpectedArg { this: &'a str },
+    /// An argument is undefined.
+    UnknownArg { this: &'a str },
     /// Unexpected input tokens.
     InvalidInput,
 }
@@ -95,34 +95,50 @@ impl DefaultFormatter {
     pub fn namespace(&self) -> Option<&str> {
         self.namespace
     }
+
+    fn fmt_arg<'a>(&'a self, name: &'a str) -> FmtArg {
+        FmtArg(self, name)
+    }
+
+    fn fmt_args<'a>(&'a self, names: &'a [&'a str]) -> FmtArgs {
+        FmtArgs(self, names)
+    }
 }
 
 impl ErrorFormatter for DefaultFormatter {
     fn fmt(&self, err: &Error) -> String {
         match err {
-            Error::DuplicateArg { name } => {
-                format!("{} is duplicate", FmtArg(self.namespace, name))
+            Error::DuplicateArg { this } => {
+                format!("{} is duplicate", self.fmt_arg(this))
             }
-            Error::ConflictArgs { name, conflicts } => format!(
-                "{} conflicts with {}",
-                FmtArg(self.namespace, name),
-                FmtArgs(self.namespace, conflicts),
-            ),
-            Error::MissingRequirements { missings } => {
+            Error::MissingRequired {
+                this: Some(this),
+                required,
+            } => {
                 format!(
-                    "{} {} required",
-                    if missings.len() > 1 { "are" } else { "is" },
-                    FmtArgs(self.namespace, missings),
+                    "{} requires {}",
+                    self.fmt_arg(this),
+                    self.fmt_args(required)
                 )
             }
-            Error::UnknownArg { name } => {
-                format!("{} is unknown", FmtArg(self.namespace, name))
+            Error::MissingRequired {
+                this: None,
+                required,
+            } => {
+                format!("requires {}", self.fmt_args(required))
             }
-            Error::UnexpectedArg { name } => {
+            Error::ArgConflict { this, conflict } => {
                 format!(
-                    "{} is not allowed in this node",
-                    FmtArg(self.namespace, name),
+                    "{} conflicts with {}",
+                    self.fmt_arg(this),
+                    self.fmt_arg(conflict),
                 )
+            }
+            Error::UnexpectedArg { this } => {
+                format!("{} is not allowed", self.fmt_arg(this))
+            }
+            Error::UnknownArg { this } => {
+                format!("{} is unknown", self.fmt_arg(this))
             }
             Error::InvalidInput => {
                 format!("invalid input")
@@ -131,10 +147,10 @@ impl ErrorFormatter for DefaultFormatter {
     }
 }
 
-struct FmtArg<'a>(Option<&'a str>, &'a str);
+struct FmtArg<'a>(&'a DefaultFormatter, &'a str);
 impl fmt::Display for FmtArg<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(ns) = self.0 {
+        if let Some(ns) = self.0.namespace {
             write!(f, "`{}.{}`", ns, self.1)
         } else {
             write!(f, "`{}`", self.1)
@@ -142,16 +158,27 @@ impl fmt::Display for FmtArg<'_> {
     }
 }
 
-struct FmtArgs<'a>(Option<&'a str>, &'a [&'a str]);
+struct FmtArgs<'a>(&'a DefaultFormatter, &'a [&'a str]);
 impl<'a> fmt::Display for FmtArgs<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut iter = self.1.iter();
-        if let Some(arg) = iter.next() {
-            write!(f, "{}", FmtArg(self.0, arg))?;
+        let FmtArgs(fm, grp) = self;
+        match (grp.get(0), grp.get(1)) {
+            (Some(n1), None) => {
+                write!(f, "{}", fm.fmt_arg(n1))
+            }
+            (Some(n1), Some(n2)) => {
+                write!(f, "{} or {}", fm.fmt_arg(n1), fm.fmt_arg(n2))
+            }
+            _ => {
+                let mut iter = grp.iter();
+                if let Some(arg) = iter.next() {
+                    write!(f, "one of {}", fm.fmt_arg(arg))?;
+                }
+                for arg in iter {
+                    write!(f, ", {}", fm.fmt_arg(arg))?;
+                }
+                Ok(())
+            }
         }
-        for arg in iter {
-            write!(f, ", {}", FmtArg(self.0, arg))?;
-        }
-        Ok(())
     }
 }

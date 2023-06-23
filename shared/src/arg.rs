@@ -41,34 +41,34 @@ impl<T> Arg<T> {
         self
     }
 
-    /// This argument is mutually exclusive with the specified argument.
-    pub fn conflicts_with(self, name: Name) -> Self {
-        self.rt.borrow_mut().add_conflicts_with(self.id, name);
-        self
-    }
-
-    /// Sets an argument that is required when this one is present
+    /// Sets an argument/group required when this one is present
     pub fn requires(self, name: Name) -> Self {
         self.rt.borrow_mut().add_requires(self.id, name);
         self
     }
 
-    /// The name of the group which the argument belongs to. Arguments in the group
-    /// conflicts with each other.
-    pub fn group(self, name: Name) -> Self {
-        self.rt.borrow_mut().add_group(self.id, name);
+    /// This argument is mutually exclusive with the specified argument/group.
+    pub fn conflicts_with(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_conflicts_with(self.id, name);
         self
+    }
+
+    /// The name of the group which the argument belongs to. Every argument in
+    /// the group conflicts with each other.
+    pub fn group(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_to_group(self.id, name);
+        self
+    }
+
+    /// Marks this argument as unexpected.
+    pub fn set_unexpected(&mut self) {
+        self.rt.borrow_mut().add_unexpected(self.id);
     }
 
     /// Collects a value for this argument.
     pub fn add_value(&mut self, span: Span, value: T) {
         self.values.push((value, span));
         self.rt.borrow_mut().add_source(self.id, span);
-    }
-
-    /// Marks this argument as unexpected.
-    pub fn set_unexpected(&mut self) {
-        self.rt.borrow_mut().add_unexpected(self.id);
     }
 
     /// Returns the number if encountered values.
@@ -199,3 +199,46 @@ define_iter!(
     /// An iterator over the spans of an [`Arg`].
     & Spans [Span] => self.inner.1;
 );
+
+/// A logical group of related [`Arg`]s.
+pub struct ArgGroup {
+    id: Id,
+    rt: Rt,
+}
+
+impl ArgGroup {
+    pub(crate) fn new(id: Id, rt: Rt) -> Self {
+        Self { id, rt }
+    }
+
+    /// Adds an argument to this group.
+    pub fn arg(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_member(self.id, name);
+        self
+    }
+
+    /// Specifies any of the arguments in this group must be present.
+    pub fn required(self) -> Self {
+        self.rt.borrow_mut().add_required(self.id);
+        self
+    }
+
+    /// Requires the specified argument/group when any of the arguments in this
+    /// group is present.
+    pub fn requires(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_requires(self.id, name);
+        self
+    }
+
+    /// Every argument in in this group is mutually exclusive with the specified
+    /// argument/group.
+    pub fn conflicts_with(self, name: Name) -> Self {
+        self.rt.borrow_mut().add_conflicts_with(self.id, name);
+        self
+    }
+
+    /// Marks every argument in this group as unexpected.
+    pub fn set_unexpected(&mut self) {
+        self.rt.borrow_mut().add_unexpected(self.id);
+    }
+}

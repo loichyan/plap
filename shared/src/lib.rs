@@ -1,3 +1,6 @@
+#[macro_use]
+mod util;
+
 mod ast;
 mod error;
 mod ext;
@@ -8,7 +11,7 @@ pub mod arg;
 
 #[doc(inline)]
 pub use {
-    arg::{Arg, ArgAction},
+    arg::{Arg, ArgAction, ArgGroup},
     ast::*,
     error::*,
     ext::*,

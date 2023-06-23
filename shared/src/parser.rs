@@ -1,4 +1,4 @@
-use crate::{runtime::Rt, Arg, DefaultFormatter, ErrorFormatter, Name};
+use crate::{arg::ArgGroup, runtime::Rt, Arg, DefaultFormatter, ErrorFormatter, Name};
 use proc_macro2::{Span, TokenTree};
 use syn::{parse::ParseStream, Ident, Result, Token};
 
@@ -35,7 +35,7 @@ pub trait Parser: Sized {
                         // Attempt to parse as an unknown argument
                         let name = input.parse::<Ident>()?;
                         context.format(&crate::Error::UnknownArg {
-                            name: &name.to_string(),
+                            this: &name.to_string(),
                         })
                     } else {
                         // Invalid input
@@ -110,6 +110,12 @@ impl ParserContext {
     pub fn arg<T>(&mut self, name: Name) -> Arg<T> {
         let id = self.rt.borrow_mut().register(name);
         Arg::new(id, self.rt.clone())
+    }
+
+    /// Registers a group.
+    pub fn group<T>(&mut self, name: Name) -> ArgGroup {
+        let id = self.rt.borrow_mut().register(name);
+        ArgGroup::new(id, self.rt.clone())
     }
 
     /// Saves an error which will be reported in [`finish`].
