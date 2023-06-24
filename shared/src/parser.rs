@@ -138,6 +138,7 @@ impl ParserContext {
 #[derive(Default)]
 pub struct ParserContextBuilder {
     node: Option<Span>,
+    namespace: Option<Name>,
     formatter: Option<Box<dyn ErrorFormatter>>,
 }
 
@@ -146,6 +147,15 @@ impl ParserContextBuilder {
     pub fn node(self, node: Span) -> Self {
         Self {
             node: Some(node),
+            ..self
+        }
+    }
+
+    /// Defines the namespace of [`DefaultFormatter`] for arguments and formats
+    /// each argument as `namespace.argument`.
+    pub fn namespace(self, namespace: Name) -> Self {
+        Self {
+            namespace: Some(namespace),
             ..self
         }
     }
@@ -166,10 +176,14 @@ impl ParserContextBuilder {
     ///
     /// [`node`]: Self::node
     pub fn build(self) -> ParserContext {
-        let Self { node, formatter } = self;
+        let Self {
+            node,
+            namespace,
+            formatter,
+        } = self;
         ParserContext {
             node: node.expect("`ParserContext::node` is required"),
-            formatter: formatter.unwrap_or_else(|| Box::new(DefaultFormatter::default())),
+            formatter: formatter.unwrap_or_else(|| Box::new(DefaultFormatter { namespace })),
             rt: <_>::default(),
         }
     }
