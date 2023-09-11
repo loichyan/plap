@@ -78,4 +78,23 @@ impl<T> Arg<T> {
     pub(crate) fn add_value(&mut self, val: T) {
         self.values.push(val);
     }
+
+    pub fn any(self) -> Vec<T> {
+        self.values
+    }
+
+    pub fn at_most_one(self) -> Option<T> {
+        assert!(self.values.len() <= 1);
+        self.values.into_iter().next()
+    }
+
+    pub fn only_one(self) -> T {
+        assert!(self.values.len() == 1);
+        self.values.into_iter().next().unwrap()
+    }
+
+    pub fn at_least_one(self) -> Vec<T> {
+        assert!(self.values.len() >= 1);
+        self.values
+    }
 }
