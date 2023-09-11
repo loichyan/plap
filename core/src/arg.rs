@@ -18,19 +18,26 @@ pub struct ArgBuilder<'a, T> {
 }
 
 pub(crate) struct ArgState {
+    pub action: ArgAction,
     pub required: bool,
     pub requires: Vec<Id>,
     pub conflicts: Vec<Id>,
     pub sources: Vec<Span>,
 }
 
+pub enum ArgAction {
+    Set,
+    Append,
+}
+
 impl ArgState {
     pub fn new() -> Self {
         Self {
-            sources: Vec::new(),
+            action: ArgAction::Append,
             required: false,
-            conflicts: Vec::new(),
             requires: Vec::new(),
+            conflicts: Vec::new(),
+            sources: Vec::new(),
         }
     }
 }
@@ -43,6 +50,11 @@ impl<'a, T> ArgBuilder<'a, T> {
             state: ArgState::new(),
             _marker: PhantomData,
         }
+    }
+
+    pub fn action(mut self, action: ArgAction) -> Self {
+        self.state.action = action;
+        self
     }
 
     pub fn required(mut self) -> Self {
