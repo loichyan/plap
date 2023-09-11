@@ -2,46 +2,41 @@ use crate::{
     runtime::{Id, RuntimeBuilder},
     Name,
 };
-use proc_macro2::Span;
-use std::marker::PhantomData;
 
-pub struct Arg<T> {
+pub struct Group {
     id: Id,
-    values: Vec<T>,
 }
 
-pub struct ArgBuilder<'a, T> {
+pub struct GroupBuilder<'a> {
     id: Id,
     rt: &'a mut RuntimeBuilder,
-    state: ArgState,
-    _marker: PhantomData<T>,
+    state: GroupState,
 }
 
-pub(crate) struct ArgState {
+pub(crate) struct GroupState {
+    pub members: Vec<Id>,
     pub required: bool,
     pub requires: Vec<Id>,
     pub conflicts: Vec<Id>,
-    pub sources: Vec<Span>,
 }
 
-impl ArgState {
+impl GroupState {
     pub fn new() -> Self {
         Self {
-            sources: Vec::new(),
             required: false,
             conflicts: Vec::new(),
             requires: Vec::new(),
+            members: Vec::new(),
         }
     }
 }
 
-impl<'a, T> ArgBuilder<'a, T> {
+impl<'a> GroupBuilder<'a> {
     pub(crate) fn new(id: Id, rt: &'a mut RuntimeBuilder) -> Self {
-        ArgBuilder {
+        GroupBuilder {
             id,
             rt,
-            state: ArgState::new(),
-            _marker: PhantomData,
+            state: GroupState::new(),
         }
     }
 
@@ -60,22 +55,20 @@ impl<'a, T> ArgBuilder<'a, T> {
         self
     }
 
-    pub fn finish(self) -> Arg<T> {
+    pub fn arg(mut self, name: Name) -> Self {
+        self.state.members.push(self.rt.register(name));
+        self
+    }
+
+    pub fn finish(self) -> Group {
         let Self { id, rt, state, .. } = self;
-        rt.track_arg(id, state);
-        Arg {
-            id,
-            values: Vec::new(),
-        }
+        rt.track_group(id, state);
+        Group { id }
     }
 }
 
-impl<T> Arg<T> {
+impl Group {
     pub(crate) fn id(&self) -> Id {
         self.id
-    }
-
-    pub(crate) fn add_value(&mut self, val: T) {
-        self.values.push(val);
     }
 }
