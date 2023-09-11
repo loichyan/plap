@@ -27,7 +27,25 @@ enum State {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Id(usize);
 
+impl Default for RuntimeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RuntimeBuilder {
+    pub fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            ids: BTreeMap::new(),
+            names: Vec::with_capacity(capacity),
+            states: Vec::with_capacity(capacity),
+        }
+    }
+
     pub(crate) fn register(&mut self, name: Name) -> Id {
         debug_assert_eq!(self.ids.len(), self.states.len());
         match self.ids.entry(name) {
@@ -76,6 +94,10 @@ impl RuntimeBuilder {
 }
 
 impl Runtime {
+    pub fn builder() -> RuntimeBuilder {
+        RuntimeBuilder::new()
+    }
+
     pub(crate) fn name_of(&self, id: Id) -> &str {
         self.names[id.0]
     }
