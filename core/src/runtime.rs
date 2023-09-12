@@ -57,17 +57,18 @@ impl Default for RuntimeBuilder {
 
 impl RuntimeBuilder {
     pub fn new() -> Self {
-        Self::with_capacity(0)
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
         Self {
             node: None,
             namespace: None,
             formatter: None,
             ids: BTreeMap::new(),
-            states: Vec::with_capacity(capacity),
+            states: Vec::new(),
         }
+    }
+
+    pub fn capacity(mut self, capacity: usize) -> Self {
+        self.states = Vec::with_capacity(capacity);
+        self
     }
 
     pub fn node(mut self, node: Span) -> Self {
