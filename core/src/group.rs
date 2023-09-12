@@ -14,29 +14,25 @@ pub struct GroupBuilder<'a> {
 }
 
 pub(crate) struct GroupState {
+    pub name: Name,
     pub members: Vec<Id>,
     pub required: bool,
     pub requires: Vec<Id>,
     pub conflicts: Vec<Id>,
 }
 
-impl GroupState {
-    pub fn new() -> Self {
-        Self {
-            required: false,
-            conflicts: Vec::new(),
-            requires: Vec::new(),
-            members: Vec::new(),
-        }
-    }
-}
-
 impl<'a> GroupBuilder<'a> {
-    pub(crate) fn new(id: Id, rt: &'a mut RuntimeBuilder) -> Self {
+    pub(crate) fn new(name: Name, rt: &'a mut RuntimeBuilder) -> Self {
         GroupBuilder {
-            id,
+            id: rt.register(name),
             rt,
-            state: GroupState::new(),
+            state: GroupState {
+                name,
+                required: false,
+                conflicts: Vec::new(),
+                requires: Vec::new(),
+                members: Vec::new(),
+            },
         }
     }
 
