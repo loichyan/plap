@@ -27,6 +27,7 @@ pub(crate) struct ArgState {
     pub sources: Vec<Span>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArgAction {
     Set,
     Append,
