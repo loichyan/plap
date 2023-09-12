@@ -260,21 +260,22 @@ impl<'a> RuntimeChecker<'a> {
                     if grp.required && !self.supplied(id) {
                         self.missing_argument(&[rt.node], id);
                     }
-                    // TODO: multiple members group
-                    // Members in same group conflict with each other.
-                    for i in 0..grp.members.len() {
-                        let id = grp.members[i];
-                        for conflicting in grp.members[..i]
-                            .iter()
-                            .chain(grp.members[i + 1..].iter())
-                            .copied()
-                        {
-                            if !self.supplied(conflicting) {
-                                continue;
+                    if !grp.multiple {
+                        // Members in same group conflict with each other.
+                        for i in 0..grp.members.len() {
+                            let id = grp.members[i];
+                            for conflicting in grp.members[..i]
+                                .iter()
+                                .chain(grp.members[i + 1..].iter())
+                                .copied()
+                            {
+                                if !self.supplied(conflicting) {
+                                    continue;
+                                }
+                                rt.visit_args(rt.state(id), |arg| {
+                                    self.conflicting_argument(&arg.sources, conflicting);
+                                });
                             }
-                            rt.visit_args(rt.state(id), |arg| {
-                                self.conflicting_argument(&arg.sources, conflicting);
-                            });
                         }
                     }
                     // Check for missing requirements.

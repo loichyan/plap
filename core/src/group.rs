@@ -15,10 +15,11 @@ pub struct GroupBuilder<'a> {
 
 pub(crate) struct GroupState {
     pub name: Name,
-    pub members: Vec<Id>,
     pub required: bool,
+    pub multiple: bool,
     pub requires: Vec<Id>,
     pub conflicts: Vec<Id>,
+    pub members: Vec<Id>,
 }
 
 impl<'a> GroupBuilder<'a> {
@@ -29,6 +30,7 @@ impl<'a> GroupBuilder<'a> {
             state: GroupState {
                 name,
                 required: false,
+                multiple: false,
                 conflicts: Vec::new(),
                 requires: Vec::new(),
                 members: Vec::new(),
@@ -38,6 +40,11 @@ impl<'a> GroupBuilder<'a> {
 
     pub fn required(mut self) -> Self {
         self.state.required = true;
+        self
+    }
+
+    pub fn multiple(mut self) -> Self {
+        self.state.multiple = true;
         self
     }
 
