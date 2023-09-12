@@ -17,6 +17,7 @@ pub struct Runtime {
     states: Vec<State>,
 }
 
+#[must_use]
 pub struct RuntimeBuilder {
     node: Option<Span>,
     namespace: Option<Name>,

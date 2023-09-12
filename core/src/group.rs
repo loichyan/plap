@@ -7,6 +7,7 @@ pub struct Group {
     id: Id,
 }
 
+#[must_use]
 pub struct GroupBuilder<'a> {
     id: Id,
     rt: &'a mut RuntimeBuilder,

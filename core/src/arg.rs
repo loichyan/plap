@@ -10,6 +10,7 @@ pub struct Arg<T> {
     values: Vec<T>,
 }
 
+#[must_use]
 pub struct ArgBuilder<'a, T> {
     id: Id,
     rt: &'a mut RuntimeBuilder,
