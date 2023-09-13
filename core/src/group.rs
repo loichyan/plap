@@ -23,19 +23,25 @@ pub(crate) struct GroupState {
     pub conflicts: Vec<Id>,
 }
 
+impl GroupState {
+    pub fn new() -> Self {
+        Self {
+            name: DUMMY_NAME,
+            members: Vec::new(),
+            required: false,
+            multiple: false,
+            conflicts: Vec::new(),
+            requires: Vec::new(),
+        }
+    }
+}
+
 impl<'a> GroupBuilder<'a> {
     pub(crate) fn new(id: Id, rt: &'a mut RuntimeBuilder) -> Self {
         GroupBuilder {
             id,
             rt,
-            state: GroupState {
-                name: DUMMY_NAME,
-                members: Vec::new(),
-                required: false,
-                multiple: false,
-                conflicts: Vec::new(),
-                requires: Vec::new(),
-            },
+            state: GroupState::new(),
         }
     }
 

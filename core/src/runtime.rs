@@ -1,6 +1,6 @@
 use crate::{
     arg::{Arg, ArgAction, ArgBuilder, ArgState},
-    error::{DefaultFormatter, DelegatedFormatter, Error, ErrorFormatter, ErrorKind, ErrorKind::*},
+    error::{DefaultFormatter, DelegatedFormatter, Error, Error::*, ErrorFormatter},
     group::{GroupBuilder, GroupState},
     Name, RawName, DUMMY_NAME,
 };
@@ -207,39 +207,30 @@ impl Runtime {
     }
 
     fn visit_args<'a>(&'a self, state: &'a State, mut f: impl FnMut(&'a ArgState)) {
-        match state {
-            State::Arg(arg) => f(arg),
-            State::Group(grp) => self.visit_members(grp, f),
-            _ => unreachable!(),
-        }
-    }
-
-    fn visit_members<'a>(&'a self, grp: &'a GroupState, mut f: impl FnMut(&'a ArgState)) {
-        fn visit_members_impl<'a, F>(rt: &'a Runtime, grp: &'a GroupState, f: &mut F)
+        fn visit_args_impl<'a, F>(rt: &'a Runtime, state: &'a State, f: &mut F)
         where
             F: FnMut(&'a ArgState),
         {
-            for id in grp.members.iter().copied() {
-                match &rt.state(id) {
-                    State::Arg(arg) => f(arg),
-                    State::Group(grp) => visit_members_impl(rt, grp, f),
-                    _ => unreachable!(),
+            match state {
+                State::Arg(arg) => f(arg),
+                State::Group(grp) => {
+                    // In most cases, a group is not nested, so that we can
+                    // avoid recursive calls.
+                    for id in grp.members.iter().copied() {
+                        match rt.state(id) {
+                            State::Arg(arg) => f(arg),
+                            state => visit_args_impl(rt, state, f),
+                        }
+                    }
                 }
+                _ => unreachable!(),
             }
         }
-        visit_members_impl(self, grp, &mut f)
+        visit_args_impl(self, state, &mut f)
     }
 
-    fn fmt_error(&self, err: &Error) -> SynError {
-        SynError::new(err.node(), DisplayError(&self.formatter, err))
-    }
-
-    fn check_supplied(&self, id: Id) -> bool {
-        match &self.state(id) {
-            State::Arg(arg) => !arg.sources.is_empty(),
-            State::Group(grp) => grp.members.iter().all(|id| self.check_supplied(*id)),
-            _ => unreachable!(),
-        }
+    fn fmt_error(&self, err: &Error) -> String {
+        DisplayError(&self.formatter, err).to_string()
     }
 }
 
@@ -255,40 +246,30 @@ impl<'a> RuntimeChecker<'a> {
         let rt = self.rt;
         for (id, state) in rt.states.iter().enumerate() {
             let id = Id(id);
+            let requires: &[Id];
+            let conflicts: &[Id];
             match state {
                 State::Arg(arg) => {
                     // A required argument must be supplied.
                     if arg.required && !self.supplied(id) {
                         self.missing_argument(&[rt.node], id);
                     }
-                    // Validatevalue count.
+                    // Validate value count.
                     if matches!(arg.action, ArgAction::Set) && arg.sources.len() > 1 {
                         for node in arg.sources.iter().copied() {
                             self.error(node, DuplicateValue);
                         }
                     }
-                    // Check for missing requirements.
-                    for id in arg.requires.iter().copied() {
-                        if self.supplied(id) {
-                            continue;
-                        }
-                        self.missing_argument(&arg.sources, id);
-                    }
-                    // Check for conflicting arguments/groups.
-                    for id in arg.conflicts.iter().copied() {
-                        if !self.supplied(id) {
-                            continue;
-                        }
-                        self.conflicting_argument(&arg.sources, id);
-                    }
+                    requires = &arg.requires;
+                    conflicts = &arg.conflicts;
                 }
                 State::Group(grp) => {
                     // All members of a required group must be supplied.
                     if grp.required && !self.supplied(id) {
                         self.missing_argument(&[rt.node], id);
                     }
+                    // Arguments in a single-member group conflict with each other.
                     if !grp.multiple {
-                        // Members in same group conflict with each other.
                         for i in 0..grp.members.len() {
                             let id = grp.members[i];
                             for conflicting in grp.members[..i]
@@ -305,26 +286,28 @@ impl<'a> RuntimeChecker<'a> {
                             }
                         }
                     }
-                    // Check for missing requirements.
-                    for id in grp.requires.iter().copied() {
-                        if self.supplied(id) {
-                            continue;
-                        }
-                        rt.visit_members(grp, |arg| {
-                            self.missing_argument(&arg.sources, id);
-                        });
-                    }
-                    // Check for conflicting arguments/groups.
-                    for id in grp.conflicts.iter().copied() {
-                        if !self.supplied(id) {
-                            continue;
-                        }
-                        rt.visit_members(grp, |arg| {
-                            self.conflicting_argument(&arg.sources, id);
-                        });
-                    }
+                    requires = &grp.requires;
+                    conflicts = &grp.conflicts;
                 }
                 _ => unreachable!(),
+            }
+            // Check for missing requirements.
+            for id in requires.iter().copied() {
+                if self.supplied(id) {
+                    continue;
+                }
+                rt.visit_args(state, |arg| {
+                    self.missing_argument(&arg.sources, id);
+                });
+            }
+            // Check for conflicting arguments/groups.
+            for id in conflicts.iter().copied() {
+                if !self.supplied(id) {
+                    continue;
+                }
+                rt.visit_args(state, |arg| {
+                    self.conflicting_argument(&arg.sources, id);
+                });
             }
         }
 
@@ -332,28 +315,24 @@ impl<'a> RuntimeChecker<'a> {
     }
 
     fn supplied(&mut self, id: Id) -> bool {
-        match &mut self.supplied[id.0] {
-            Some(s) => *s,
-            slot => {
-                let s = self.rt.check_supplied(id);
-                *slot = Some(s);
-                s
+        fn check_supplied(rt: &Runtime, id: Id) -> bool {
+            match &rt.state(id) {
+                State::Arg(arg) => !arg.sources.is_empty(),
+                State::Group(grp) => grp.members.iter().all(|id| check_supplied(rt, *id)),
+                _ => unreachable!(),
             }
         }
+        *self.supplied[id.0].get_or_insert_with(|| check_supplied(self.rt, id))
     }
 
-    fn collect_args<'b, T>(
-        &'b mut self,
-        state: &'a State,
-        f: impl FnOnce(&'b [&'a str]) -> T,
-    ) -> T {
+    fn collect_args<'b, T>(&'b mut self, id: Id, f: impl FnOnce(&'b [&'a str]) -> T) -> T {
         self.buffer.clear();
-        self.rt.visit_args(state, |arg| self.buffer.push(&arg.name));
+        self.rt
+            .visit_args(self.rt.state(id), |arg| self.buffer.push(&arg.name));
         f(&self.buffer)
     }
 
-    fn error(&mut self, node: Span, kind: ErrorKind) {
-        let err = Error::new(node, kind);
+    fn error(&mut self, node: Span, err: Error) {
         self.error_syn(SynError::new(node, self.rt.fmt_error(&err)));
     }
 
@@ -367,21 +346,17 @@ impl<'a> RuntimeChecker<'a> {
 
     fn missing_argument(&mut self, nodes: &[Span], id: Id) {
         let rt = self.rt;
+        let msg = self.collect_args(id, |args| rt.fmt_error(&MissingArgument { args }));
         for node in nodes.iter().copied() {
-            let err = self.collect_args(rt.state(id), |args| {
-                rt.fmt_error(&Error::new(node, MissingArgument { args }))
-            });
-            self.error_syn(err);
+            self.error_syn(SynError::new(node, &msg));
         }
     }
 
     fn conflicting_argument(&mut self, nodes: &[Span], id: Id) {
         let rt = self.rt;
+        let msg = self.collect_args(id, |args| rt.fmt_error(&ConflictingArgument { args }));
         for node in nodes.iter().copied() {
-            let err = self.collect_args(rt.state(id), |args| {
-                rt.fmt_error(&Error::new(node, ConflictingArgument { args }))
-            });
-            self.error_syn(err);
+            self.error_syn(SynError::new(node, &msg));
         }
     }
 }
@@ -421,6 +396,12 @@ mod tests {
         };
     }
 
+    macro_rules! track_arg {
+        ($rt:ident, $arg:ident) => {
+            $rt.track_arg(&mut $arg, Span::call_site(), ());
+        };
+    }
+
     #[test]
     #[should_panic = "missing definition for `arg2`"]
     fn panic_on_missing_definition() {
@@ -438,7 +419,7 @@ mod tests {
     fn panic_on_mismatched_runtime() {
         runtime!(rt1 { arg1; });
         runtime!(rt2 { arg2; arg3; });
-        rt1.track_arg(&mut arg3, Span::call_site(), ());
+        track_arg!(rt1, arg3);
     }
 
     #[test]
@@ -448,7 +429,7 @@ mod tests {
         runtime!(rt { arg1.required(); });
         assert!(rt.check().is_err());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // at most one value when action is 'set'
@@ -456,10 +437,10 @@ mod tests {
         runtime!(rt { arg1.action(ArgAction::Set); });
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_err());
 
         // any count of arguments when action is 'append'
@@ -467,46 +448,46 @@ mod tests {
         runtime!(rt { arg1.action(ArgAction::Append); });
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // requires an argument
 
         runtime!(rt { arg1; arg2.requires("arg1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_err());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // requires a group
 
         runtime!(rt { arg1; grp1[arg1]; arg2.requires("grp1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_err());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // conflicts with an argument
 
         runtime!(rt { arg1; arg2.conflicts("arg1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_err());
 
         // conflicts with a group
 
         runtime!(rt { arg1; grp1[arg1]; arg2.conflicts("grp1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_err());
     }
 
@@ -517,7 +498,7 @@ mod tests {
         runtime!(rt { arg1; grp1[arg1].required(); });
         assert!(rt.check().is_err());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // single-member group
@@ -525,10 +506,10 @@ mod tests {
         runtime!(rt { arg1; arg2; grp1[arg1,arg2]; });
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_err());
 
         // multiple-members group
@@ -536,46 +517,46 @@ mod tests {
         runtime!(rt { arg1; arg2; grp1[arg1,arg2].multiple(); });
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_ok());
 
         // requires an argument
 
         runtime!(rt { arg1; arg2; grp1[arg2].requires("arg1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_err());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // requires a group
 
         runtime!(rt { arg1; arg2; grp1[arg1]; grp2[arg2].requires("grp1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_err());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_ok());
 
         // conflicts with an argument
 
         runtime!(rt { arg1; arg2; grp1[arg2].conflicts("arg1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_err());
 
         // conflicts with a group
 
         runtime!(rt { arg1; arg2; grp1[arg1]; grp2[arg2].conflicts("grp1"); });
-        rt.track_arg(&mut arg2, Span::call_site(), ());
+        track_arg!(rt, arg2);
         assert!(rt.check().is_ok());
 
-        rt.track_arg(&mut arg1, Span::call_site(), ());
+        track_arg!(rt, arg1);
         assert!(rt.check().is_err());
     }
 }

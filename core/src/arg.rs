@@ -33,19 +33,25 @@ pub enum ArgAction {
     Append,
 }
 
+impl ArgState {
+    pub fn new() -> Self {
+        Self {
+            name: DUMMY_NAME,
+            action: ArgAction::Append,
+            required: false,
+            requires: Vec::new(),
+            conflicts: Vec::new(),
+            sources: Vec::new(),
+        }
+    }
+}
+
 impl<'a, T> ArgBuilder<'a, T> {
     pub(crate) fn new(id: Id, rt: &'a mut RuntimeBuilder) -> Self {
         ArgBuilder {
             id,
             rt,
-            state: ArgState {
-                name: DUMMY_NAME,
-                action: ArgAction::Append,
-                required: false,
-                requires: Vec::new(),
-                conflicts: Vec::new(),
-                sources: Vec::new(),
-            },
+            state: ArgState::new(),
             _marker: PhantomData,
         }
     }
