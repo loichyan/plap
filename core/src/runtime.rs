@@ -437,6 +437,17 @@ mod tests {
         rt.track_arg(&mut arg1, Span::call_site(), ());
         assert!(rt.check().is_err());
 
+        // any count of arguments when action is 'append'
+
+        runtime!(rt { arg1.action(ArgAction::Append); });
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
         // requires an argument
 
         runtime!(rt { arg1; arg2.requires("arg1"); });
