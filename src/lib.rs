@@ -1,1 +1,2 @@
-pub use plap_shared::*;
+#[doc(inline)]
+pub use plap_core::*;
