@@ -74,6 +74,7 @@ impl<'a> GroupBuilder<'a> {
 }
 
 impl Group {
+    #[allow(dead_code)]
     pub(crate) fn id(&self) -> Id {
         self.id
     }
