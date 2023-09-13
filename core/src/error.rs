@@ -1,14 +1,8 @@
 use crate::RawName;
-use proc_macro2::Span;
 use std::fmt;
 
-pub struct Error<'a> {
-    node: Span,
-    kind: ErrorKind<'a>,
-}
-
 #[non_exhaustive]
-pub enum ErrorKind<'a> {
+pub enum Error<'a> {
     /// Any of `args` must be supplied.
     MissingArgument {
         args: &'a [&'a str],
@@ -18,20 +12,6 @@ pub enum ErrorKind<'a> {
         args: &'a [&'a str],
     },
     DuplicateValue,
-}
-
-impl<'a> Error<'a> {
-    pub(crate) fn new(node: Span, kind: ErrorKind<'a>) -> Self {
-        Self { node, kind }
-    }
-
-    pub fn node(&self) -> Span {
-        self.node
-    }
-
-    pub fn kind(&self) -> &ErrorKind<'a> {
-        &self.kind
-    }
 }
 
 pub trait ErrorFormatter {
@@ -59,14 +39,14 @@ pub(crate) struct DefaultFormatter {
 impl ErrorFormatter for DefaultFormatter {
     fn fmt(&self, f: &mut fmt::Formatter, err: &Error) -> fmt::Result {
         let ns = self.namespace.as_deref();
-        match err.kind() {
-            ErrorKind::MissingArgument { args } => {
+        match err {
+            Error::MissingArgument { args } => {
                 write!(f, "requires {}", FmtGrp(ns, args))
             }
-            ErrorKind::ConflictingArgument { args: group } => {
+            Error::ConflictingArgument { args: group } => {
                 write!(f, "conflicts with {}", FmtGrp(ns, group))
             }
-            ErrorKind::DuplicateValue => {
+            Error::DuplicateValue => {
                 write!(f, "duplicate value")
             }
         }

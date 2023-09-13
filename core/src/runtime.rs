@@ -1,6 +1,6 @@
 use crate::{
     arg::{Arg, ArgAction, ArgBuilder, ArgState},
-    error::{DefaultFormatter, DelegatedFormatter, Error, ErrorFormatter, ErrorKind, ErrorKind::*},
+    error::{DefaultFormatter, DelegatedFormatter, Error, Error::*, ErrorFormatter},
     group::{GroupBuilder, GroupState},
     Name, RawName, DUMMY_NAME,
 };
@@ -230,8 +230,8 @@ impl Runtime {
         visit_members_impl(self, grp, &mut f)
     }
 
-    fn fmt_error(&self, err: &Error) -> SynError {
-        SynError::new(err.node(), DisplayError(&self.formatter, err))
+    fn fmt_error(&self, err: &Error) -> String {
+        DisplayError(&self.formatter, err).to_string()
     }
 
     fn check_supplied(&self, id: Id) -> bool {
@@ -255,40 +255,30 @@ impl<'a> RuntimeChecker<'a> {
         let rt = self.rt;
         for (id, state) in rt.states.iter().enumerate() {
             let id = Id(id);
+            let requires: &[Id];
+            let conflicts: &[Id];
             match state {
                 State::Arg(arg) => {
                     // A required argument must be supplied.
                     if arg.required && !self.supplied(id) {
                         self.missing_argument(&[rt.node], id);
                     }
-                    // Validatevalue count.
+                    // Validate value count.
                     if matches!(arg.action, ArgAction::Set) && arg.sources.len() > 1 {
                         for node in arg.sources.iter().copied() {
                             self.error(node, DuplicateValue);
                         }
                     }
-                    // Check for missing requirements.
-                    for id in arg.requires.iter().copied() {
-                        if self.supplied(id) {
-                            continue;
-                        }
-                        self.missing_argument(&arg.sources, id);
-                    }
-                    // Check for conflicting arguments/groups.
-                    for id in arg.conflicts.iter().copied() {
-                        if !self.supplied(id) {
-                            continue;
-                        }
-                        self.conflicting_argument(&arg.sources, id);
-                    }
+                    requires = &arg.requires;
+                    conflicts = &arg.conflicts;
                 }
                 State::Group(grp) => {
                     // All members of a required group must be supplied.
                     if grp.required && !self.supplied(id) {
                         self.missing_argument(&[rt.node], id);
                     }
+                    // Arguments in a single-member group conflict with each other.
                     if !grp.multiple {
-                        // Members in same group conflict with each other.
                         for i in 0..grp.members.len() {
                             let id = grp.members[i];
                             for conflicting in grp.members[..i]
@@ -305,26 +295,28 @@ impl<'a> RuntimeChecker<'a> {
                             }
                         }
                     }
-                    // Check for missing requirements.
-                    for id in grp.requires.iter().copied() {
-                        if self.supplied(id) {
-                            continue;
-                        }
-                        rt.visit_members(grp, |arg| {
-                            self.missing_argument(&arg.sources, id);
-                        });
-                    }
-                    // Check for conflicting arguments/groups.
-                    for id in grp.conflicts.iter().copied() {
-                        if !self.supplied(id) {
-                            continue;
-                        }
-                        rt.visit_members(grp, |arg| {
-                            self.conflicting_argument(&arg.sources, id);
-                        });
-                    }
+                    requires = &grp.requires;
+                    conflicts = &grp.conflicts;
                 }
                 _ => unreachable!(),
+            }
+            // Check for missing requirements.
+            for id in requires.iter().copied() {
+                if self.supplied(id) {
+                    continue;
+                }
+                rt.visit_args(state, |arg| {
+                    self.missing_argument(&arg.sources, id);
+                });
+            }
+            // Check for conflicting arguments/groups.
+            for id in conflicts.iter().copied() {
+                if !self.supplied(id) {
+                    continue;
+                }
+                rt.visit_args(state, |arg| {
+                    self.conflicting_argument(&arg.sources, id);
+                });
             }
         }
 
@@ -332,28 +324,17 @@ impl<'a> RuntimeChecker<'a> {
     }
 
     fn supplied(&mut self, id: Id) -> bool {
-        match &mut self.supplied[id.0] {
-            Some(s) => *s,
-            slot => {
-                let s = self.rt.check_supplied(id);
-                *slot = Some(s);
-                s
-            }
-        }
+        *self.supplied[id.0].get_or_insert_with(|| self.rt.check_supplied(id))
     }
 
-    fn collect_args<'b, T>(
-        &'b mut self,
-        state: &'a State,
-        f: impl FnOnce(&'b [&'a str]) -> T,
-    ) -> T {
+    fn collect_args<'b, T>(&'b mut self, id: Id, f: impl FnOnce(&'b [&'a str]) -> T) -> T {
         self.buffer.clear();
-        self.rt.visit_args(state, |arg| self.buffer.push(&arg.name));
+        self.rt
+            .visit_args(self.rt.state(id), |arg| self.buffer.push(&arg.name));
         f(&self.buffer)
     }
 
-    fn error(&mut self, node: Span, kind: ErrorKind) {
-        let err = Error::new(node, kind);
+    fn error(&mut self, node: Span, err: Error) {
         self.error_syn(SynError::new(node, self.rt.fmt_error(&err)));
     }
 
@@ -367,21 +348,17 @@ impl<'a> RuntimeChecker<'a> {
 
     fn missing_argument(&mut self, nodes: &[Span], id: Id) {
         let rt = self.rt;
+        let msg = self.collect_args(id, |args| rt.fmt_error(&MissingArgument { args }));
         for node in nodes.iter().copied() {
-            let err = self.collect_args(rt.state(id), |args| {
-                rt.fmt_error(&Error::new(node, MissingArgument { args }))
-            });
-            self.error_syn(err);
+            self.error_syn(SynError::new(node, &msg));
         }
     }
 
     fn conflicting_argument(&mut self, nodes: &[Span], id: Id) {
         let rt = self.rt;
+        let msg = self.collect_args(id, |args| rt.fmt_error(&ConflictingArgument { args }));
         for node in nodes.iter().copied() {
-            let err = self.collect_args(rt.state(id), |args| {
-                rt.fmt_error(&Error::new(node, ConflictingArgument { args }))
-            });
-            self.error_syn(err);
+            self.error_syn(SynError::new(node, &msg));
         }
     }
 }
