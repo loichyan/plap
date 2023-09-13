@@ -1,4 +1,4 @@
-use crate::Name;
+use crate::RawName;
 use proc_macro2::Span;
 use std::fmt;
 
@@ -29,7 +29,7 @@ impl<'a> Error<'a> {
         self.node
     }
 
-    pub fn kind(&self) -> &ErrorKind {
+    pub fn kind(&self) -> &ErrorKind<'a> {
         &self.kind
     }
 }
@@ -53,12 +53,12 @@ impl ErrorFormatter for DelegatedFormatter {
 }
 
 pub(crate) struct DefaultFormatter {
-    pub namespace: Option<Name>,
+    pub namespace: Option<RawName>,
 }
 
 impl ErrorFormatter for DefaultFormatter {
     fn fmt(&self, f: &mut fmt::Formatter, err: &Error) -> fmt::Result {
-        let ns = self.namespace;
+        let ns = self.namespace.as_deref();
         match err.kind() {
             ErrorKind::MissingArgument { args } => {
                 write!(f, "requires {}", FmtGrp(ns, args))

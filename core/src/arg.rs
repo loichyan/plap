@@ -1,6 +1,6 @@
 use crate::{
     runtime::{Id, RuntimeBuilder},
-    Name,
+    Name, RawName, DUMMY_NAME,
 };
 use proc_macro2::Span;
 use std::marker::PhantomData;
@@ -19,7 +19,7 @@ pub struct ArgBuilder<'a, T> {
 }
 
 pub(crate) struct ArgState {
-    pub name: Name,
+    pub name: RawName,
     pub action: ArgAction,
     pub required: bool,
     pub requires: Vec<Id>,
@@ -34,12 +34,12 @@ pub enum ArgAction {
 }
 
 impl<'a, T> ArgBuilder<'a, T> {
-    pub(crate) fn new(name: Name, rt: &'a mut RuntimeBuilder) -> Self {
+    pub(crate) fn new(id: Id, rt: &'a mut RuntimeBuilder) -> Self {
         ArgBuilder {
-            id: rt.register(name),
+            id,
             rt,
             state: ArgState {
-                name,
+                name: DUMMY_NAME,
                 action: ArgAction::Append,
                 required: false,
                 requires: Vec::new(),
@@ -60,12 +60,18 @@ impl<'a, T> ArgBuilder<'a, T> {
         self
     }
 
-    pub fn requires(mut self, name: Name) -> Self {
+    pub fn requires<N>(mut self, name: N) -> Self
+    where
+        N: Into<Name>,
+    {
         self.state.requires.push(self.rt.register(name));
         self
     }
 
-    pub fn conflicts(mut self, name: Name) -> Self {
+    pub fn conflicts<N>(mut self, name: N) -> Self
+    where
+        N: Into<Name>,
+    {
         self.state.conflicts.push(self.rt.register(name));
         self
     }

@@ -2,7 +2,7 @@ use crate::{
     arg::{Arg, ArgAction, ArgBuilder, ArgState},
     error::{DefaultFormatter, DelegatedFormatter, Error, ErrorFormatter, ErrorKind, ErrorKind::*},
     group::{GroupBuilder, GroupState},
-    Name,
+    Name, RawName, DUMMY_NAME,
 };
 use proc_macro2::Span;
 use std::{
@@ -20,28 +20,28 @@ pub struct Runtime {
 #[must_use]
 pub struct RuntimeBuilder {
     node: Option<Span>,
-    namespace: Option<Name>,
+    namespace: Option<RawName>,
     formatter: Option<Box<dyn ErrorFormatter>>,
-    ids: BTreeMap<Name, Id>,
+    ids: BTreeMap<RawName, Id>,
     states: Vec<State>,
 }
 
 enum State {
-    Undefined(UndefinedState),
+    Undefined(Undefined),
     Arg(ArgState),
     Group(GroupState),
 }
 
-struct UndefinedState {
-    name: Name,
+struct Undefined {
+    name: RawName,
 }
 
 impl State {
-    pub fn name(&self) -> &str {
+    pub fn name_mut(&mut self) -> &mut RawName {
         match self {
-            Self::Arg(ArgState { name, .. })
-            | Self::Group(GroupState { name, .. })
-            | Self::Undefined(UndefinedState { name, .. }) => name,
+            Self::Undefined(s) => &mut s.name,
+            Self::Arg(s) => &mut s.name,
+            Self::Group(s) => &mut s.name,
         }
     }
 }
@@ -76,8 +76,11 @@ impl RuntimeBuilder {
         self
     }
 
-    pub fn namespace(mut self, namespace: Name) -> Self {
-        self.namespace = Some(namespace);
+    pub fn namespace<N>(mut self, namespace: N) -> Self
+    where
+        N: Into<Name>,
+    {
+        self.namespace = Some(namespace.into().0);
         self
     }
 
@@ -89,36 +92,54 @@ impl RuntimeBuilder {
         self
     }
 
-    pub(crate) fn register(&mut self, name: Name) -> Id {
-        debug_assert_eq!(self.ids.len(), self.states.len());
-        match self.ids.entry(name) {
-            btree_map::Entry::Occupied(t) => *t.get(),
-            btree_map::Entry::Vacant(t) => {
-                let id = Id(self.states.len());
-                self.states.push(State::Undefined(UndefinedState { name }));
-                t.insert(id);
-                id
+    pub(crate) fn register<N>(&mut self, name: N) -> Id
+    where
+        N: Into<Name>,
+    {
+        fn register_impl(rt: &mut RuntimeBuilder, name: Name) -> Id {
+            debug_assert_eq!(rt.ids.len(), rt.states.len());
+            let Name(name) = name;
+            match rt.ids.entry(name.clone()) {
+                btree_map::Entry::Occupied(t) => *t.get(),
+                btree_map::Entry::Vacant(t) => {
+                    let id = Id(rt.states.len());
+                    rt.states.push(State::Undefined(Undefined { name }));
+                    t.insert(id);
+                    id
+                }
             }
         }
+        register_impl(self, name.into())
     }
 
-    fn track_state(&mut self, id: Id, state: State) {
-        match &mut self.states[id.0] {
-            slot @ State::Undefined(_) => *slot = state,
-            _ => panic!("duplicate definition for `{}`", state.name()),
+    fn track_state(&mut self, id: Id, mut state: State) {
+        debug_assert_eq!(state.name_mut(), &DUMMY_NAME);
+        let slot = &mut self.states[id.0];
+        match slot {
+            State::Undefined(s) => {
+                std::mem::swap(&mut s.name, state.name_mut());
+                *slot = state;
+            }
+            _ => panic!("duplicate definition for `{}`", slot.name_mut()),
         }
     }
 
-    pub fn arg<T>(&mut self, name: Name) -> ArgBuilder<T> {
-        ArgBuilder::new(name, self)
+    pub fn arg<N, T>(&mut self, name: N) -> ArgBuilder<T>
+    where
+        N: Into<Name>,
+    {
+        ArgBuilder::new(self.register(name), self)
     }
 
-    pub(crate) fn track_arg(&mut self, id: Id, state: ArgState) {
-        self.track_state(id, State::Arg(state));
+    pub(crate) fn track_arg(&mut self, id: Id, arg: ArgState) {
+        self.track_state(id, State::Arg(arg));
     }
 
-    pub fn group(&mut self, name: Name) -> GroupBuilder {
-        GroupBuilder::new(name, self)
+    pub fn group<N>(&mut self, name: N) -> GroupBuilder
+    where
+        N: Into<Name>,
+    {
+        GroupBuilder::new(self.register(name), self)
     }
 
     pub(crate) fn track_group(&mut self, id: Id, state: GroupState) {
@@ -134,7 +155,7 @@ impl RuntimeBuilder {
             states,
         } = self;
         for state in states.iter() {
-            if let State::Undefined(UndefinedState { name }) = state {
+            if let State::Undefined(Undefined { name }) = state {
                 panic!("missing definition for `{}`", name);
             }
         }
@@ -321,9 +342,13 @@ impl<'a> RuntimeChecker<'a> {
         }
     }
 
-    fn map_members<'b, T>(&'b mut self, state: &State, f: impl FnOnce(&'b [&'a str]) -> T) -> T {
+    fn collect_args<'b, T>(
+        &'b mut self,
+        state: &'a State,
+        f: impl FnOnce(&'b [&'a str]) -> T,
+    ) -> T {
         self.buffer.clear();
-        self.rt.visit_args(state, |arg| self.buffer.push(arg.name));
+        self.rt.visit_args(state, |arg| self.buffer.push(&arg.name));
         f(&self.buffer)
     }
 
@@ -343,7 +368,7 @@ impl<'a> RuntimeChecker<'a> {
     fn missing_argument(&mut self, nodes: &[Span], id: Id) {
         let rt = self.rt;
         for node in nodes.iter().copied() {
-            let err = self.map_members(rt.state(id), |args| {
+            let err = self.collect_args(rt.state(id), |args| {
                 rt.fmt_error(&Error::new(node, MissingArgument { args }))
             });
             self.error_syn(err);
@@ -353,7 +378,7 @@ impl<'a> RuntimeChecker<'a> {
     fn conflicting_argument(&mut self, nodes: &[Span], id: Id) {
         let rt = self.rt;
         for node in nodes.iter().copied() {
-            let err = self.map_members(rt.state(id), |args| {
+            let err = self.collect_args(rt.state(id), |args| {
                 rt.fmt_error(&Error::new(node, ConflictingArgument { args }))
             });
             self.error_syn(err);
@@ -389,7 +414,7 @@ mod tests {
 
         };
         (@new $rt:ident, $name:expr, []) => {
-            $rt.arg::<()>($name)
+            $rt.arg::<_, ()>($name)
         };
         (@new $rt:ident, $name:expr, [$($member:ident),*]) => {
             $rt.group($name) $(.arg(stringify!($member)))*

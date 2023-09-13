@@ -1,6 +1,6 @@
 use crate::{
     runtime::{Id, RuntimeBuilder},
-    Name,
+    Name, RawName, DUMMY_NAME,
 };
 
 pub struct Group {
@@ -15,7 +15,7 @@ pub struct GroupBuilder<'a> {
 }
 
 pub(crate) struct GroupState {
-    pub name: Name,
+    pub name: RawName,
     pub members: Vec<Id>,
     pub required: bool,
     pub multiple: bool,
@@ -24,12 +24,12 @@ pub(crate) struct GroupState {
 }
 
 impl<'a> GroupBuilder<'a> {
-    pub(crate) fn new(name: Name, rt: &'a mut RuntimeBuilder) -> Self {
+    pub(crate) fn new(id: Id, rt: &'a mut RuntimeBuilder) -> Self {
         GroupBuilder {
-            id: rt.register(name),
+            id,
             rt,
             state: GroupState {
-                name,
+                name: DUMMY_NAME,
                 members: Vec::new(),
                 required: false,
                 multiple: false,
@@ -39,7 +39,10 @@ impl<'a> GroupBuilder<'a> {
         }
     }
 
-    pub fn arg(mut self, name: Name) -> Self {
+    pub fn arg<N>(mut self, name: N) -> Self
+    where
+        N: Into<Name>,
+    {
         self.state.members.push(self.rt.register(name));
         self
     }
@@ -56,12 +59,18 @@ impl<'a> GroupBuilder<'a> {
         self
     }
 
-    pub fn requires(mut self, name: Name) -> Self {
+    pub fn requires<N>(mut self, name: N) -> Self
+    where
+        N: Into<Name>,
+    {
         self.state.requires.push(self.rt.register(name));
         self
     }
 
-    pub fn conflicts(mut self, name: Name) -> Self {
+    pub fn conflicts<N>(mut self, name: N) -> Self
+    where
+        N: Into<Name>,
+    {
         self.state.conflicts.push(self.rt.register(name));
         self
     }
