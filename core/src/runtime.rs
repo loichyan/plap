@@ -105,7 +105,7 @@ impl RuntimeBuilder {
     fn track_state(&mut self, id: Id, state: State) {
         match &mut self.states[id.0] {
             slot @ State::Undefined(_) => *slot = state,
-            _ => panic!("duplicate definition for '{}'", state.name()),
+            _ => panic!("duplicate definition for `{}`", state.name()),
         }
     }
 
@@ -135,7 +135,7 @@ impl RuntimeBuilder {
         } = self;
         for state in states.iter() {
             if let State::Undefined(UndefinedState { name }) = state {
-                panic!("missing definition for '{}'", name);
+                panic!("missing definition for `{}`", name);
             }
         }
         Runtime {
@@ -157,7 +157,7 @@ impl Runtime {
         self.states
             .get_mut(id.0)
             .and_then(|s| if let State::Arg(s) = s { Some(s) } else { None })
-            .expect("given id does not belong to current runtime")
+            .expect("given argument does not belong to current runtime")
             .sources
             .push(span);
     }
@@ -168,8 +168,12 @@ impl Runtime {
     }
 
     pub fn finish(self) -> Result<()> {
+        self.check()
+    }
+
+    fn check(&self) -> Result<()> {
         RuntimeChecker {
-            rt: &self,
+            rt: self,
             supplied: vec![None; self.states.len()],
             buffer: Vec::new(),
             error: None,
@@ -249,7 +253,7 @@ impl<'a> RuntimeChecker<'a> {
                         }
                         self.missing_argument(&arg.sources, id);
                     }
-                    // Check for conflicting arguments.
+                    // Check for conflicting arguments/groups.
                     for id in arg.conflicts.iter().copied() {
                         if !self.supplied(id) {
                             continue;
@@ -289,7 +293,7 @@ impl<'a> RuntimeChecker<'a> {
                             self.missing_argument(&arg.sources, id);
                         });
                     }
-                    // Check for conflicting arguments.
+                    // Check for conflicting arguments/groups.
                     for id in grp.conflicts.iter().copied() {
                         if !self.supplied(id) {
                             continue;
@@ -365,5 +369,177 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f, self.1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! runtime {
+        ($rt:ident { $($name:ident $([$($members:tt)*])? $(.$method:ident $arg:tt)*;)* }) => {
+            let mut $rt = Runtime::builder();
+            $(#[allow(unused)]
+            let mut $name =
+                runtime!(@new $rt, stringify!($name), [$($($members)*)*])
+                $(.$method $arg)*
+                .finish();)*
+            #[allow(unused)]
+            let mut $rt = $rt.finish();
+
+        };
+        (@new $rt:ident, $name:expr, []) => {
+            $rt.arg::<()>($name)
+        };
+        (@new $rt:ident, $name:expr, [$($member:ident),*]) => {
+            $rt.group($name) $(.arg(stringify!($member)))*
+        };
+    }
+
+    #[test]
+    #[should_panic = "missing definition for `arg2`"]
+    fn panic_on_missing_definition() {
+        runtime!(rt { arg1.requires("arg2"); });
+    }
+
+    #[test]
+    #[should_panic = "duplicate definition for `arg2`"]
+    fn panic_on_duplicate_definition() {
+        runtime!(rt { arg1; arg2; arg2; });
+    }
+
+    #[test]
+    #[should_panic = "given argument does not belong to current runtime"]
+    fn panic_on_mismatched_runtime() {
+        runtime!(rt1 { arg1; });
+        runtime!(rt2 { arg2; arg3; });
+        rt1.track_arg(&mut arg3, Span::call_site(), ());
+    }
+
+    #[test]
+    fn check_arg_state() {
+        // required
+
+        runtime!(rt { arg1.required(); });
+        assert!(rt.check().is_err());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // at most one value when action is 'set'
+
+        runtime!(rt { arg1.action(ArgAction::Set); });
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        // requires an argument
+
+        runtime!(rt { arg1; arg2.requires("arg1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // requires a group
+
+        runtime!(rt { arg1; grp1[arg1]; arg2.requires("grp1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // conflicts with an argument
+
+        runtime!(rt { arg1; arg2.conflicts("arg1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        // conflicts with a group
+
+        runtime!(rt { arg1; grp1[arg1]; arg2.conflicts("grp1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_err());
+    }
+
+    #[test]
+    fn check_group_state() {
+        // required
+
+        runtime!(rt { arg1; grp1[arg1].required(); });
+        assert!(rt.check().is_err());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // single-member group
+
+        runtime!(rt { arg1; arg2; grp1[arg1,arg2]; });
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        // multiple-members group
+
+        runtime!(rt { arg1; arg2; grp1[arg1,arg2].multiple(); });
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // requires an argument
+
+        runtime!(rt { arg1; arg2; grp1[arg2].requires("arg1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // requires a group
+
+        runtime!(rt { arg1; arg2; grp1[arg1]; grp2[arg2].requires("grp1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        // conflicts with an argument
+
+        runtime!(rt { arg1; arg2; grp1[arg2].conflicts("arg1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_err());
+
+        // conflicts with a group
+
+        runtime!(rt { arg1; arg2; grp1[arg1]; grp2[arg2].conflicts("grp1"); });
+        rt.track_arg(&mut arg2, Span::call_site(), ());
+        assert!(rt.check().is_ok());
+
+        rt.track_arg(&mut arg1, Span::call_site(), ());
+        assert!(rt.check().is_err());
     }
 }

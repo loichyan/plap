@@ -17,5 +17,4 @@ repository = "https://github.com/loichyan/plap"
 plap-core = { path = "core" }
 
 [dev-dependencies]
-thiserror = "1.0"
 trybuild = "1.0"
