@@ -53,7 +53,10 @@ impl<'a> GroupBuilder<'a> {
         self
     }
 
-    // TODO: pub fn capacity(mut self, capacity: usize) -> Self
+    pub fn capacity(mut self, capacity: usize) -> Self {
+        self.state.members.reserve_exact(capacity);
+        self
+    }
 
     pub fn required(mut self) -> Self {
         self.state.required = true;
