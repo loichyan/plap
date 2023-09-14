@@ -67,7 +67,7 @@ impl RuntimeBuilder {
     }
 
     pub fn capacity(mut self, capacity: usize) -> Self {
-        self.states = Vec::with_capacity(capacity);
+        self.states.reserve_exact(capacity);
         self
     }
 
