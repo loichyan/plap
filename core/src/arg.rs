@@ -84,7 +84,7 @@ impl<'a, T> ArgBuilder<'a, T> {
 
     pub fn finish(self) -> Arg<T> {
         let Self { id, rt, state, .. } = self;
-        rt.track_arg(id, state);
+        rt.finish_arg(id, state);
         Arg {
             id,
             values: Vec::new(),
@@ -101,22 +101,21 @@ impl<T> Arg<T> {
         self.values.push(val);
     }
 
-    pub fn any(self) -> Vec<T> {
+    pub fn as_vec(self) -> Vec<T> {
         self.values
     }
 
-    pub fn at_most_one(self) -> Option<T> {
-        assert!(self.values.len() <= 1);
+    pub fn as_option(self) -> Option<T> {
         self.values.into_iter().next()
     }
 
-    pub fn only_one(self) -> T {
-        assert!(self.values.len() == 1);
+    pub fn as_value(self) -> T {
         self.values.into_iter().next().unwrap()
     }
+}
 
-    pub fn at_least_one(self) -> Vec<T> {
-        assert!(self.values.len() >= 1);
-        self.values
+impl Arg<bool> {
+    pub fn as_flag(self) -> bool {
+        self.as_option().unwrap_or(false)
     }
 }

@@ -131,7 +131,7 @@ impl RuntimeBuilder {
         ArgBuilder::new(self.register(name), self)
     }
 
-    pub(crate) fn track_arg(&mut self, id: Id, arg: ArgState) {
+    pub(crate) fn finish_arg(&mut self, id: Id, arg: ArgState) {
         self.track_state(id, State::Arg(arg));
     }
 
@@ -142,8 +142,8 @@ impl RuntimeBuilder {
         GroupBuilder::new(self.register(name), self)
     }
 
-    pub(crate) fn track_group(&mut self, id: Id, state: GroupState) {
-        self.track_state(id, State::Group(state));
+    pub(crate) fn finish_group(&mut self, id: Id, grp: GroupState) {
+        self.track_state(id, State::Group(grp));
     }
 
     pub fn finish(self) -> Runtime {

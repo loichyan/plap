@@ -83,7 +83,7 @@ impl<'a> GroupBuilder<'a> {
 
     pub fn finish(self) -> Group {
         let Self { id, rt, state, .. } = self;
-        rt.track_group(id, state);
+        rt.finish_group(id, state);
         Group { id }
     }
 }
