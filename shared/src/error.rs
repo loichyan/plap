@@ -48,7 +48,7 @@ pub enum Error<'a> {
 
 /// A formatter that should meet most cases.
 pub struct DefaultFormatter {
-    namespace: Option<Name>,
+    pub(crate) namespace: Option<Name>,
 }
 
 /// Builder for [`DefaultFormatter`].
