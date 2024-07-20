@@ -1,6 +1,3 @@
-[workspace]
-members = ["core", "macro"]
-
 [package]
 name = "plap"
 version = "0.0.0"
@@ -9,13 +6,13 @@ authors = ["Loi Chyan <loichyan@foxmail.com>"]
 edition = "2021"
 rust-version = "1.56"
 
-description = "An argument parser for proc-macros."
+description = "An argument parser for proc-macros"
 readme = "README.md"
 repository = "https://github.com/loichyan/plap"
 
 [dependencies]
-plap-macro = { version = "=0.0.0", path = "macro" }
-plap-core = { version = "=0.0.0", path = "core" }
+proc-macro2 = "1.0"
+syn = { version = "2.0", default-features = false, features = ["parsing"] }
 
 [dev-dependencies]
 trybuild = "1.0"
