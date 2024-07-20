@@ -1,5 +1,5 @@
 [workspace]
-members = ["macro", "shared"]
+members = ["core", "macro"]
 
 [package]
 name = "plap"
@@ -15,7 +15,7 @@ repository = "https://github.com/loichyan/plap"
 
 [dependencies]
 plap-macro = { version = "=0.0.0", path = "macro" }
-plap-shared = { version = "=0.0.0", path = "shared" }
+plap-core = { version = "=0.0.0", path = "core" }
 
 [dev-dependencies]
 trybuild = "1.0"

@@ -1,1 +1,1 @@
-pub use plap_shared::*;
+pub use plap_core::*;
