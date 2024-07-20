@@ -88,3 +88,9 @@ where
         }
     }
 }
+
+macro_rules! is_debug {
+    () => {
+        cfg!(debug_assertions)
+    };
+}

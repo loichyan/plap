@@ -1,11 +1,11 @@
 #[macro_use]
 mod util;
-
 mod ast;
 mod error;
 mod ext;
 mod parser;
 mod runtime;
+pub mod schema;
 
 pub mod arg;
 
