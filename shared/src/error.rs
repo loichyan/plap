@@ -1,5 +1,6 @@
-use crate::Name;
 use std::fmt;
+
+use crate::Name;
 
 /// Customize validation [`Error`]s.
 pub trait ErrorFormatter {
@@ -58,7 +59,8 @@ pub struct DefaultFormatterBuilder {
 }
 
 impl DefaultFormatterBuilder {
-    /// Defines the namespace for arguments and formats each argument as `namespace.argument`.
+    /// Defines the namespace for arguments and formats each argument as
+    /// `namespace.argument`.
     pub fn namespace(self, namespace: Name) -> Self {
         Self {
             namespace: Some(namespace),

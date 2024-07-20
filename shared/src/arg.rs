@@ -1,8 +1,7 @@
-use crate::{
-    runtime::{Id, Rt},
-    Name,
-};
 use proc_macro2::Span;
+
+use crate::runtime::{Id, Rt};
+use crate::Name;
 
 /// An user-defined argument.
 pub struct Arg<T> {
@@ -35,7 +34,8 @@ impl<T> Arg<T> {
         self
     }
 
-    /// Specifies that the argument must be present and returns at least one value.
+    /// Specifies that the argument must be present and returns at least one
+    /// value.
     pub fn required(self) -> Self {
         self.rt.borrow_mut().add_required(self.id);
         self

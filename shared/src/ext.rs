@@ -1,8 +1,7 @@
+use syn::parse::{Parse, ParseBuffer};
+use syn::Result;
+
 use crate::{ExprArg, FlagArg, NamedArg};
-use syn::{
-    parse::{Parse, ParseBuffer},
-    Result,
-};
 
 /// An extension trait for [`ParseBuffer`].
 pub trait ParseStreamExt {

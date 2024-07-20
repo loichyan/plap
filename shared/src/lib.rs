@@ -9,6 +9,9 @@ mod runtime;
 
 pub mod arg;
 
+use proc_macro2::Span;
+use syn::parse::ParseStream;
+use syn::Result;
 #[doc(inline)]
 pub use {
     arg::{Arg, ArgAction, ArgGroup},
@@ -17,9 +20,6 @@ pub use {
     ext::*,
     parser::*,
 };
-
-use proc_macro2::Span;
-use syn::{parse::ParseStream, Result};
 
 type Name = &'static str;
 

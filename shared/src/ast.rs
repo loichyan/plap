@@ -1,8 +1,5 @@
-use syn::{
-    braced, bracketed, parenthesized,
-    parse::{Parse, ParseStream},
-    token, Ident, LitStr, Result, Token,
-};
+use syn::parse::{Parse, ParseStream};
+use syn::{braced, bracketed, parenthesized, token, Ident, LitStr, Result, Token};
 
 /// An argument followed by a delimited value.
 ///
@@ -42,7 +39,8 @@ where
     }
 }
 
-/// A delimited argument whose value can appear right of equal token without quotes.
+/// A delimited argument whose value can appear right of equal token without
+/// quotes.
 ///
 /// Supported syntaxes:
 ///

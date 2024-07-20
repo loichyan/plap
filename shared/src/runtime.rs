@@ -1,14 +1,12 @@
-use crate::{
-    util::{Buffer, Either, ErrorCollector},
-    ArgAction, Name, ParserContext,
-};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
+
 use proc_macro2::Span;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-    rc::Rc,
-};
 use syn::Result;
+
+use crate::util::{Buffer, Either, ErrorCollector};
+use crate::{ArgAction, Name, ParserContext};
 
 pub(crate) type Rt = Rc<RefCell<Runtime>>;
 

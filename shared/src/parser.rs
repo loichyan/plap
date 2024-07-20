@@ -1,6 +1,10 @@
-use crate::{arg::ArgGroup, runtime::Rt, Arg, DefaultFormatter, ErrorFormatter, Name};
 use proc_macro2::{Span, TokenTree};
-use syn::{parse::ParseStream, Ident, Result, Token};
+use syn::parse::ParseStream;
+use syn::{Ident, Result, Token};
+
+use crate::arg::ArgGroup;
+use crate::runtime::Rt;
+use crate::{Arg, DefaultFormatter, ErrorFormatter, Name};
 
 /// Parse input stream into user-defined container.
 pub trait Parser: Sized {
@@ -15,8 +19,8 @@ pub trait Parser: Sized {
     /// Returns the mutable context of current parser.
     fn context_mut(&mut self) -> &mut ParserContext;
 
-    /// Attempts to parse an encountered argument and returns `false` if the input
-    /// stream cannot be parsed.
+    /// Attempts to parse an encountered argument and returns `false` if the
+    /// input stream cannot be parsed.
     fn parse_once(&mut self, input: ParseStream) -> Result<bool>;
 
     /// Parses the input stream as comma-separated arguments.
@@ -69,8 +73,8 @@ pub trait Parser: Sized {
     /// Completes parsing, validates results and returns errors that occurred
     /// during parsing/validating.
     ///
-    /// **Note:** This function should combine all encountered validation errors into
-    /// a single error.
+    /// **Note:** This function should combine all encountered validation errors
+    /// into a single error.
     fn finish(self) -> Result<Self::Output>;
 }
 

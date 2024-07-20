@@ -80,6 +80,7 @@ where
     R: Iterator<Item = L::Item>,
 {
     type Item = L::Item;
+
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Left(l) => l.next(),
