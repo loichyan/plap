@@ -3,6 +3,7 @@ mod util;
 mod ast;
 mod error;
 mod ext;
+pub mod id;
 mod parser;
 mod runtime;
 pub mod schema;

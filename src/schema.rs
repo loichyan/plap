@@ -4,17 +4,18 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::Span;
 use syn::parse::ParseStream;
 
-type Id = usize;
-type Name = Box<str>;
+use crate::id::Id;
+
+type Idx = usize;
 
 #[derive(Debug, Default)]
 pub struct Schema {
     ids: IdMap,
-    required: BTreeSet<Id>,
+    required: BTreeSet<Idx>,
     /// Mutually exclusive groups
-    exclusions: BTreeSet<Id>,
-    requirements: BTreeMap<Id, BTreeSet<Id>>,
-    conflicts: BTreeMap<Id, BTreeSet<Id>>,
+    exclusions: BTreeSet<Idx>,
+    requirements: BTreeMap<Idx, BTreeSet<Idx>>,
+    conflicts: BTreeMap<Idx, BTreeSet<Idx>>,
 }
 
 impl Schema {
@@ -22,7 +23,11 @@ impl Schema {
         Self::default()
     }
 
-    pub fn arg(&mut self, name: &str, arg: ArgSchema) -> &mut Self {
+    pub fn arg(&mut self, id: impl Into<Id>, schema: ArgSchema) -> &mut Self {
+        self._arg(id.into(), schema)
+    }
+
+    fn _arg(&mut self, id: Id, schema: ArgSchema) -> &mut Self {
         let ArgSchema {
             typ,
             action,
@@ -30,26 +35,26 @@ impl Schema {
             required,
             requires,
             conflicts_with,
-        } = arg;
+        } = schema;
 
-        let id = self.ids.of(name);
+        let i = self.ids.of(id);
         let arg = ArgInfo {
             typ,
             action,
             help: help.into(),
         };
-        self.ids.register(id, InfoKind::Arg(arg));
+        self.ids.register(i, InfoKind::Arg(arg));
 
         if required {
-            self.required.insert(id);
+            self.required.insert(i);
         }
         if !requires.is_empty() {
             self.requirements
-                .insert(id, requires.into_iter().map(self.ids.as_map()).collect());
+                .insert(i, requires.into_iter().map(self.ids.as_map()).collect());
         }
         if !conflicts_with.is_empty() {
             self.conflicts.insert(
-                id,
+                i,
                 conflicts_with.into_iter().map(self.ids.as_map()).collect(),
             );
         }
@@ -57,34 +62,38 @@ impl Schema {
         self
     }
 
-    pub fn group(&mut self, name: &str, group: ArgGroupSchema) -> &mut Self {
+    pub fn group(&mut self, id: impl Into<Id>, schema: ArgGroupSchema) -> &mut Self {
+        self._group(id.into(), schema)
+    }
+
+    fn _group(&mut self, id: Id, schema: ArgGroupSchema) -> &mut Self {
         let ArgGroupSchema {
             multiple,
             members,
             required,
             requires,
             conflicts_with,
-        } = group;
+        } = schema;
 
-        let id = self.ids.of(name);
+        let i = self.ids.of(id);
         let group = ArgGroupInfo {
             members: members.into_iter().map(self.ids.as_map()).collect(),
         };
-        self.ids.register(id, InfoKind::ArgGroup(group));
+        self.ids.register(i, InfoKind::ArgGroup(group));
 
         if !multiple {
-            self.exclusions.insert(id);
+            self.exclusions.insert(i);
         }
         if required {
-            self.required.insert(id);
+            self.required.insert(i);
         }
         if !requires.is_empty() {
             self.requirements
-                .insert(id, requires.into_iter().map(self.ids.as_map()).collect());
+                .insert(i, requires.into_iter().map(self.ids.as_map()).collect());
         }
         if !conflicts_with.is_empty() {
             self.conflicts.insert(
-                id,
+                i,
                 conflicts_with.into_iter().map(self.ids.as_map()).collect(),
             );
         }
@@ -92,42 +101,50 @@ impl Schema {
         self
     }
 
-    pub fn init_arg<T>(&self, name: &str) -> Arg<T> {
-        let id = self
+    pub fn init_arg<T>(&self, id: impl Into<Id>) -> Arg<T> {
+        self._init_arg(id.into())
+    }
+
+    fn _init_arg<T>(&self, id: Id) -> Arg<T> {
+        let i = self
             .ids
-            .get(name)
-            .unwrap_or_else(|| panic!("argument `{}` is unregistered", name));
+            .get(&id)
+            .unwrap_or_else(|| panic!("argument `{}` is unregistered", id));
         if is_debug!() {
-            self.ids.ensure_arg_registered(id)
+            self.ids.ensure_arg_registered(i)
         };
         Arg {
-            id,
+            i,
             values: Vec::new(),
             spans: Vec::new(),
         }
     }
 
-    pub fn init_group(&self, name: &str) -> ArgGroup {
-        let id = self
+    pub fn init_group(&self, id: impl Into<Id>) -> ArgGroup {
+        self._init_group(id.into())
+    }
+
+    fn _init_group(&self, id: Id) -> ArgGroup {
+        let i = self
             .ids
-            .get(name)
-            .unwrap_or_else(|| panic!("group `{}` is unregistered", name));
+            .get(&id)
+            .unwrap_or_else(|| panic!("group `{}` is unregistered", id));
         if is_debug!() {
-            self.ids.ensure_group_registered(id);
+            self.ids.ensure_group_registered(i);
         }
-        ArgGroup { id }
+        ArgGroup { i }
     }
 }
 
 #[derive(Debug, Default)]
 struct IdMap {
-    ids: BTreeMap<Name, Id>,
+    ids: BTreeMap<Id, Idx>,
     infos: Vec<Info>,
 }
 
 #[derive(Debug)]
 struct Info {
-    name: Name,
+    id: Id,
     kind: InfoKind,
 }
 
@@ -139,62 +156,61 @@ enum InfoKind {
 }
 
 impl IdMap {
-    pub fn as_map(&mut self) -> impl '_ + FnMut(Name) -> Id {
-        |name| self.of(&name)
+    pub fn as_map(&mut self) -> impl '_ + FnMut(Id) -> Idx {
+        |id| self.of(id)
     }
 
-    pub fn of(&mut self, name: &str) -> Id {
+    pub fn of(&mut self, id: Id) -> Idx {
         debug_assert_eq!(self.ids.len(), self.infos.len());
-        if let Some(&id) = self.ids.get(name) {
-            return id;
+        if let Some(&i) = self.ids.get(&id) {
+            return i;
         }
-        let name = Name::from(name);
-        let id = self.infos.len();
-        self.ids.insert(name.clone(), id);
+        let i = self.infos.len();
+        self.ids.insert(id.clone(), i);
         self.infos.push(Info {
-            name,
+            id,
             kind: InfoKind::Unregistered,
         });
-        id
+        i
     }
 
-    pub fn register(&mut self, id: Id, kind: InfoKind) {
+    pub fn register(&mut self, i: Idx, kind: InfoKind) {
         debug_assert!(!matches!(kind, InfoKind::Unregistered));
-        let i = self
+        let inf = self
             .infos
-            .get_mut(id)
-            .unwrap_or_else(|| panic!("unknown identifier"));
-        match i.kind {
-            InfoKind::Unregistered => i.kind = kind,
-            _ => panic!("`{}` has been registered", i.name),
+            .get_mut(i)
+            .unwrap_or_else(|| unreachable!("unknown index"));
+        match inf.kind {
+            InfoKind::Unregistered => inf.kind = kind,
+            _ => panic!("`{}` has been registered", inf.id),
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<Id> {
-        self.ids.get(name).copied()
+    pub fn get(&self, id: &Id) -> Option<Idx> {
+        self.ids.get(id).copied()
     }
 
-    pub fn get_info(&self, id: Id) -> Option<&Info> {
-        self.infos.get(id)
+    pub fn get_info(&self, i: Idx) -> Option<&Info> {
+        self.infos.get(i)
     }
 
-    pub fn ensure_arg_registered(&self, id: Id) {
-        self.get_info(id).map_or_else(
+    pub fn ensure_arg_registered(&self, i: Idx) {
+        self.get_info(i).map_or_else(
             || panic!("argument does not exist"),
-            |i| {
-                if !matches!(i.kind, InfoKind::Arg(_)) {
-                    panic!("`{}` is not registered as an argument", i.name);
+            |inf| {
+                if !matches!(inf.kind, InfoKind::Arg(_)) {
+                    panic!("`{}` is not registered as an argument", inf.id);
                 }
             },
         )
     }
 
-    pub fn ensure_group_registered(&self, id: Id) {
-        self.get_info(id).map_or_else(
+    pub fn ensure_group_registered(&self, i: Idx) {
+        self.get_info(i).map_or_else(
             || panic!("group does not exist"),
-            |i| {
-                if !matches!(i.kind, InfoKind::ArgGroup(_)) {
-                    panic!("`{}` is not registered as a group", i.name);
+            |inf| {
+                if !matches!(inf.kind, InfoKind::ArgGroup(_)) {
+                    panic!("`{}` is not registered as a group", inf.id);
                 }
             },
         )
@@ -207,8 +223,8 @@ pub struct ArgSchema {
     action: ArgAction,
     help: String,
     required: bool,
-    requires: Vec<Name>,
-    conflicts_with: Vec<Name>,
+    requires: Vec<Id>,
+    conflicts_with: Vec<Id>,
 }
 
 #[derive(Debug)]
@@ -281,46 +297,45 @@ impl ArgSchema {
         self
     }
 
-    pub fn requires(&mut self, name: &str) -> &mut Self {
-        self.requires.push(name.into());
+    pub fn requires(&mut self, id: impl Into<Id>) -> &mut Self {
+        self.requires.push(id.into());
         self
     }
 
-    pub fn requires_all<'a, I>(&mut self, names: I) -> &mut Self
+    pub fn requires_all<I>(&mut self, ids: impl IntoIterator<Item = I>) -> &mut Self
     where
-        I: IntoIterator<Item = &'a str>,
+        I: Into<Id>,
     {
-        self.requires.extend(names.into_iter().map(Name::from));
+        self.requires.extend(ids.into_iter().map(I::into));
         self
     }
 
-    pub fn conflicts_with(&mut self, name: &str) -> &mut Self {
-        self.conflicts_with.push(name.into());
+    pub fn conflicts_with(&mut self, id: impl Into<Id>) -> &mut Self {
+        self.conflicts_with.push(id.into());
         self
     }
 
-    pub fn conflicts_with_all<'a, I>(&mut self, names: I) -> &mut Self
+    pub fn conflicts_with_all<I>(&mut self, ids: impl IntoIterator<Item = I>) -> &mut Self
     where
-        I: IntoIterator<Item = &'a str>,
+        I: Into<Id>,
     {
-        self.conflicts_with
-            .extend(names.into_iter().map(Name::from));
+        self.conflicts_with.extend(ids.into_iter().map(I::into));
         self
     }
 }
 
 #[derive(Debug, Default)]
 pub struct ArgGroupSchema {
-    members: Vec<Name>,
+    members: Vec<Id>,
     multiple: bool,
     required: bool,
-    requires: Vec<Name>,
-    conflicts_with: Vec<Name>,
+    requires: Vec<Id>,
+    conflicts_with: Vec<Id>,
 }
 
 #[derive(Debug)]
 struct ArgGroupInfo {
-    members: BTreeSet<Id>,
+    members: BTreeSet<Idx>,
 }
 
 impl ArgGroupSchema {
@@ -329,16 +344,16 @@ impl ArgGroupSchema {
         self
     }
 
-    pub fn member(&mut self, name: &str) -> &mut Self {
-        self.members.push(name.into());
+    pub fn member(&mut self, id: impl Into<Id>) -> &mut Self {
+        self.members.push(id.into());
         self
     }
 
-    pub fn member_all<'a, I>(&mut self, names: I) -> &mut Self
+    pub fn member_all<I>(&mut self, ids: impl IntoIterator<Item = I>) -> &mut Self
     where
-        I: IntoIterator<Item = &'a str>,
+        I: Into<Id>,
     {
-        self.members.extend(names.into_iter().map(Name::from));
+        self.members.extend(ids.into_iter().map(I::into));
         self
     }
 
@@ -352,37 +367,36 @@ impl ArgGroupSchema {
         self
     }
 
-    pub fn requires(&mut self, name: &str) -> &mut Self {
-        self.requires.push(name.into());
+    pub fn requires(&mut self, id: impl Into<Id>) -> &mut Self {
+        self.requires.push(id.into());
         self
     }
 
-    pub fn requires_all<'a, I>(&mut self, names: I) -> &mut Self
+    pub fn requires_all<I>(&mut self, ids: impl IntoIterator<Item = I>) -> &mut Self
     where
-        I: IntoIterator<Item = &'a str>,
+        I: Into<Id>,
     {
-        self.requires.extend(names.into_iter().map(Name::from));
+        self.requires.extend(ids.into_iter().map(I::into));
         self
     }
 
-    pub fn conflicts_with(&mut self, name: &str) -> &mut Self {
-        self.conflicts_with.push(name.into());
+    pub fn conflicts_with(&mut self, id: impl Into<Id>) -> &mut Self {
+        self.conflicts_with.push(id.into());
         self
     }
 
-    pub fn conflicts_with_all<'a, I>(&mut self, names: I) -> &mut Self
+    pub fn conflicts_with_all<I>(&mut self, ids: impl IntoIterator<Item = I>) -> &mut Self
     where
-        I: IntoIterator<Item = &'a str>,
+        I: Into<Id>,
     {
-        self.conflicts_with
-            .extend(names.into_iter().map(Name::from));
+        self.conflicts_with.extend(ids.into_iter().map(I::into));
         self
     }
 }
 
 pub struct Parser<'a> {
-    i: &'a Schema,
-    args: BTreeMap<Id, &'a mut dyn AnyArg>,
+    s: &'a Schema,
+    args: BTreeMap<Idx, &'a mut dyn AnyArg>,
     unknowns: Vec<Span>,
     errors: Vec<syn::Error>,
 }
@@ -390,7 +404,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(schema: &'a Schema) -> Self {
         Self {
-            i: schema,
+            s: schema,
             args: BTreeMap::new(),
             unknowns: Vec::new(),
             errors: Vec::new(),
@@ -402,23 +416,27 @@ impl<'a> Parser<'a> {
         T: 'static + syn::parse::Parse,
     {
         if is_debug!() {
-            self.i.ids.ensure_arg_registered(arg.id);
+            self.s.ids.ensure_arg_registered(arg.i);
         }
-        self.args.insert(arg.id, arg);
+        self.args.insert(arg.i, arg);
         self
     }
 
     pub fn group(&mut self, group: &'a ArgGroup) -> &mut Self {
         if is_debug!() {
-            self.i.ids.ensure_group_registered(group.id);
+            self.s.ids.ensure_group_registered(group.i);
         }
         self
     }
 
-    pub fn get_arg<T: 'static>(&self, name: &str) -> Option<&Arg<T>> {
-        self.i
+    pub fn get_arg<T: 'static>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
+        self._get_arg(id.into())
+    }
+
+    fn _get_arg<T: 'static>(&self, id: Id) -> Option<&Arg<T>> {
+        self.s
             .ids
-            .get(name)
+            .get(&id)
             .and_then(|id| self.args.get(&id))
             .map(|arg| {
                 arg.as_any()
@@ -427,10 +445,14 @@ impl<'a> Parser<'a> {
             })
     }
 
-    pub fn get_arg_mut<T: 'static>(&mut self, name: &str) -> Option<&mut Arg<T>> {
-        self.i
+    pub fn get_arg_mut<T: 'static>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
+        self._get_arg_mut(id.into())
+    }
+
+    fn _get_arg_mut<T: 'static>(&mut self, id: Id) -> Option<&mut Arg<T>> {
+        self.s
             .ids
-            .get(name)
+            .get(&id)
             .and_then(|id| self.args.get_mut(&id))
             .map(|arg| {
                 arg.as_any_mut()
@@ -483,9 +505,9 @@ mod schema_field_type {
     pub trait Sealed: 'static {
         type Schema: Default;
 
-        fn register_to(target: &mut Schema, name: &str, schema: Self::Schema);
+        fn register_to(target: &mut Schema, name: Id, schema: Self::Schema);
 
-        fn init_from(schema: &Schema, name: &str) -> Self;
+        fn init_from(schema: &Schema, name: Id) -> Self;
 
         fn add_to_parser<'a>(parser: &mut Parser<'a>, slf: &'a mut Self);
     }
@@ -493,11 +515,11 @@ mod schema_field_type {
     impl<T: 'static + syn::parse::Parse> Sealed for Arg<T> {
         type Schema = ArgSchema;
 
-        fn register_to(target: &mut Schema, name: &str, schema: Self::Schema) {
-            target.arg(name, schema);
+        fn register_to(target: &mut Schema, id: Id, schema: Self::Schema) {
+            target.arg(id, schema);
         }
 
-        fn init_from(schema: &Schema, name: &str) -> Self {
+        fn init_from(schema: &Schema, name: Id) -> Self {
             schema.init_arg(name)
         }
 
@@ -511,11 +533,11 @@ mod schema_field_type {
     impl Sealed for ArgGroup {
         type Schema = ArgGroupSchema;
 
-        fn register_to(target: &mut Schema, name: &str, schema: Self::Schema) {
+        fn register_to(target: &mut Schema, name: Id, schema: Self::Schema) {
             target.group(name, schema);
         }
 
-        fn init_from(schema: &Schema, name: &str) -> Self {
+        fn init_from(schema: &Schema, name: Id) -> Self {
             schema.init_group(name)
         }
 
@@ -530,7 +552,7 @@ mod schema_field_type {
 pub trait SchemaFieldType: 'static + schema_field_type::Sealed {}
 
 pub struct Arg<T> {
-    id: Id,
+    i: Idx,
     spans: Vec<Span>,
     values: Vec<T>,
 }
@@ -547,7 +569,7 @@ impl<T> Arg<T> {
 }
 
 pub struct ArgGroup {
-    id: Id,
+    i: Idx,
 }
 
 impl ArgGroup {
@@ -578,23 +600,35 @@ macro_rules! define_args {
             #[allow(unused_mut)]
             fn schema() -> Schema {
                 let mut schema = Schema::default();
-                $(let mut $f_name = <$f_ty as schema_field_type::Sealed>::Schema::default();
-                $($f_name.help($doc);)*
-                $($($f_name.$attr($($attr_val)*);)*)*
-                <$f_ty as schema_field_type::Sealed>::register_to(&mut schema, stringify!($f_name), $f_name);)*
+                $(<$f_ty as schema_field_type::Sealed>::register_to(
+                    &mut schema,
+                    Id::from(stringify!($f_name)),
+                    {
+                        let mut $f_name = <$f_ty as schema_field_type::Sealed>::Schema::default();
+                        $($f_name.help($doc);)*
+                        $($($f_name.$attr($($attr_val)*);)*)*
+                        $f_name
+                    },
+                );)*
                 schema
             }
 
             fn init(schema: &Schema) -> Self {
                 Self {
-                    $($f_name: <$f_ty as schema_field_type::Sealed>::init_from(schema, stringify!($f_name)),)*
+                    $($f_name: <$f_ty as schema_field_type::Sealed>::init_from(
+                        schema,
+                        Id::from(stringify!($f_name)),
+                    ),)*
                 }
             }
 
             #[allow(unused_mut)]
             fn parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a> {
                 let mut parser = Parser::new(schema);
-                $(<$f_ty as schema_field_type::Sealed>::add_to_parser(&mut parser, &mut self.$f_name);)*
+                $(<$f_ty as schema_field_type::Sealed>::add_to_parser(
+                    &mut parser,
+                    &mut self.$f_name,
+                );)*
                 parser
             }
         }
@@ -603,19 +637,19 @@ macro_rules! define_args {
 
 define_args! {
     struct MyArgs {
-        /// Argument #1.
+        /// Argument #1
         #[plap(is_expr, required)]
         arg1: Arg<syn::Ident>,
-        /// Argument #2.
+        /// Argument #2
         #[plap(is_flag, requires = "grp1")]
         arg2: Arg<syn::LitBool>,
-        /// Argument #3.
+        /// Argument #3
         #[plap(is_token_tree, conflicts_with = "arg1")]
         arg3: Arg<syn::LitInt>,
-        /// Show usage.
+        /// Show usage
         #[plap(is_help)]
         help: Arg<syn::parse::Nothing>,
-        /// Group #1.
+        /// Group #1
         #[plap(member_all = ["arg1", "arg3"])]
         grp1: ArgGroup,
     }
