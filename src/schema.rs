@@ -23,11 +23,11 @@ impl Schema {
         Self::default()
     }
 
-    pub fn arg(&mut self, id: impl Into<Id>, schema: ArgSchema) -> &mut Self {
-        self._arg(id.into(), schema)
+    pub fn register_arg(&mut self, id: impl Into<Id>, schema: ArgSchema) -> &mut Self {
+        self._register_arg(id.into(), schema)
     }
 
-    fn _arg(&mut self, id: Id, schema: ArgSchema) -> &mut Self {
+    fn _register_arg(&mut self, id: Id, schema: ArgSchema) -> &mut Self {
         let ArgSchema {
             typ,
             action,
@@ -62,11 +62,11 @@ impl Schema {
         self
     }
 
-    pub fn group(&mut self, id: impl Into<Id>, schema: ArgGroupSchema) -> &mut Self {
-        self._group(id.into(), schema)
+    pub fn register_group(&mut self, id: impl Into<Id>, schema: ArgGroupSchema) -> &mut Self {
+        self._register_group(id.into(), schema)
     }
 
-    fn _group(&mut self, id: Id, schema: ArgGroupSchema) -> &mut Self {
+    fn _register_group(&mut self, id: Id, schema: ArgGroupSchema) -> &mut Self {
         let ArgGroupSchema {
             multiple,
             members,
@@ -411,7 +411,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn arg<T>(&mut self, arg: &'a mut Arg<T>) -> &mut Self
+    pub fn add_arg<T>(&mut self, arg: &'a mut Arg<T>) -> &mut Self
     where
         T: 'static + syn::parse::Parse,
     {
@@ -422,7 +422,7 @@ impl<'a> Parser<'a> {
         self
     }
 
-    pub fn group(&mut self, group: &'a ArgGroup) -> &mut Self {
+    pub fn add_group(&mut self, group: &'a ArgGroup) -> &mut Self {
         if is_debug!() {
             self.s.ids.ensure_group_registered(group.i);
         }
@@ -516,7 +516,7 @@ mod schema_field_type {
         type Schema = ArgSchema;
 
         fn register_to(target: &mut Schema, id: Id, schema: Self::Schema) {
-            target.arg(id, schema);
+            target.register_arg(id, schema);
         }
 
         fn init_from(schema: &Schema, name: Id) -> Self {
@@ -524,7 +524,7 @@ mod schema_field_type {
         }
 
         fn add_to_parser<'a>(parser: &mut Parser<'a>, slf: &'a mut Self) {
-            parser.arg(slf);
+            parser.add_arg(slf);
         }
     }
 
@@ -534,7 +534,7 @@ mod schema_field_type {
         type Schema = ArgGroupSchema;
 
         fn register_to(target: &mut Schema, name: Id, schema: Self::Schema) {
-            target.group(name, schema);
+            target.register_group(name, schema);
         }
 
         fn init_from(schema: &Schema, name: Id) -> Self {
@@ -542,7 +542,7 @@ mod schema_field_type {
         }
 
         fn add_to_parser<'a>(parser: &mut Parser<'a>, slf: &'a mut Self) {
-            parser.group(slf);
+            parser.add_group(slf);
         }
     }
 
