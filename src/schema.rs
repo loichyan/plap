@@ -11,9 +11,8 @@ type Idx = usize;
 #[derive(Debug, Default)]
 pub struct Schema {
     ids: IdMap,
+    // relation graph
     required: Vec<Idx>,
-    /// Mutually exclusive groups
-    exclusions: Vec<Idx>,
     requirements: BTreeMap<Idx, Vec<Idx>>,
     conflicts: BTreeMap<Idx, Vec<Idx>>,
 }
@@ -44,20 +43,7 @@ impl Schema {
             help: help.into(),
         };
         self.ids.register(i, InfoKind::Arg(arg));
-
-        if required {
-            self.required.push(i);
-        }
-        if !requires.is_empty() {
-            self.requirements
-                .insert(i, requires.into_iter().map(self.ids.as_map()).collect());
-        }
-        if !conflicts_with.is_empty() {
-            self.conflicts.insert(
-                i,
-                conflicts_with.into_iter().map(self.ids.as_map()).collect(),
-            );
-        }
+        self.update_relations(i, required, requires, conflicts_with);
 
         self
     }
@@ -78,27 +64,39 @@ impl Schema {
         let i = self.ids.of(id);
         let group = ArgGroupInfo {
             members: members.into_iter().map(self.ids.as_map()).collect(),
+            multiple,
         };
         self.ids.register(i, InfoKind::ArgGroup(group));
+        self.update_relations(i, required, requires, conflicts_with);
 
-        if !multiple {
-            self.exclusions.push(i);
-        }
+        self
+    }
+
+    fn update_relations(
+        &mut self,
+        i: Idx,
+        required: bool,
+        requires: Vec<Id>,
+        conflicts_with: Vec<Id>,
+    ) {
+        debug_assert!(!self.required.iter().any(|&t| i == t));
         if required {
             self.required.push(i);
         }
+
+        debug_assert!(!self.requirements.contains_key(&i));
         if !requires.is_empty() {
             self.requirements
                 .insert(i, requires.into_iter().map(self.ids.as_map()).collect());
         }
+
+        debug_assert!(!self.conflicts.contains_key(&i));
         if !conflicts_with.is_empty() {
             self.conflicts.insert(
                 i,
                 conflicts_with.into_iter().map(self.ids.as_map()).collect(),
             );
         }
-
-        self
     }
 
     pub fn init_arg<T>(&self, id: impl Into<Id>) -> Arg<T> {
@@ -115,8 +113,8 @@ impl Schema {
         };
         Arg {
             i,
-            values: Vec::new(),
-            spans: Vec::new(),
+            values: <_>::default(),
+            spans: <_>::default(),
         }
     }
 
@@ -336,6 +334,7 @@ pub struct ArgGroupSchema {
 #[derive(Debug)]
 struct ArgGroupInfo {
     members: Vec<Idx>,
+    multiple: bool,
 }
 
 impl ArgGroupSchema {
@@ -405,9 +404,9 @@ impl<'a> Parser<'a> {
     pub fn new(schema: &'a Schema) -> Self {
         Self {
             s: schema,
-            args: BTreeMap::new(),
-            unknowns: Vec::new(),
-            errors: Vec::new(),
+            args: <_>::default(),
+            unknowns: <_>::default(),
+            errors: <_>::default(),
         }
     }
 
