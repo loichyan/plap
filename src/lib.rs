@@ -8,6 +8,7 @@ mod parser;
 pub mod parser2;
 mod runtime;
 pub mod schema;
+pub mod validate;
 
 pub mod arg;
 

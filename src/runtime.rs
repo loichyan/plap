@@ -5,7 +5,7 @@ use std::rc::Rc;
 use proc_macro2::Span;
 use syn::Result;
 
-use crate::util::{Buffer, Either, ErrorCollector};
+use crate::util::{Buffer, Either, Errors};
 use crate::{ArgAction, Name, ParserContext};
 
 pub(crate) type Rt = Rc<RefCell<Runtime>>;
@@ -23,7 +23,7 @@ pub(crate) struct Runtime {
     // source spans
     sources: BTreeMap<Id, Vec<Span>>,
     // saved errors
-    error: ErrorCollector,
+    error: Errors,
     // runtime constraints
     actions: BTreeMap<Id, ArgAction>,
     required: BTreeSet<Id>,

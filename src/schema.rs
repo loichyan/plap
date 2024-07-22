@@ -11,11 +11,13 @@ pub(crate) type Idx = usize;
 
 #[derive(Debug, Default)]
 pub struct Schema {
-    ids: IdMap,
-    // relation graph
-    required: Vec<Idx>,
-    requirements: BTreeMap<Idx, Vec<Idx>>,
-    conflicts: BTreeMap<Idx, Vec<Idx>>,
+    pub(crate) i: IdMap,
+    /// The values of an exclusive argument are duplicated with each other. The
+    /// members of an exclusive group conflict with each other.
+    pub(crate) exclusives: Vec<Idx>,
+    pub(crate) required: Vec<Idx>,
+    pub(crate) requirements: BTreeMap<Idx, Vec<Idx>>,
+    pub(crate) conflicts: BTreeMap<Idx, Vec<Idx>>,
 }
 
 impl Schema {
@@ -30,21 +32,20 @@ impl Schema {
     fn _register_arg(&mut self, id: Id, schema: ArgSchema) -> &mut Self {
         let ArgSchema {
             typ,
-            action,
             help,
+            multiple,
             required,
             requires,
             conflicts_with,
         } = schema;
 
-        let i = self.ids.of(id);
+        let i = self.i.of(id);
         let arg = ArgInfo {
             typ,
-            action,
             help: help.into(),
         };
-        self.ids.register(i, InfoKind::Arg(arg));
-        self.update_relations(i, required, requires, conflicts_with);
+        self.i.register(i, InfoKind::Arg(arg));
+        self.update_relations(i, multiple, required, requires, conflicts_with);
 
         self
     }
@@ -62,13 +63,12 @@ impl Schema {
             conflicts_with,
         } = schema;
 
-        let i = self.ids.of(id);
+        let i = self.i.of(id);
         let group = ArgGroupInfo {
-            members: members.into_iter().map(self.ids.as_map()).collect(),
-            multiple,
+            members: members.into_iter().map(self.i.as_map()).collect(),
         };
-        self.ids.register(i, InfoKind::ArgGroup(group));
-        self.update_relations(i, required, requires, conflicts_with);
+        self.i.register(i, InfoKind::ArgGroup(group));
+        self.update_relations(i, multiple, required, requires, conflicts_with);
 
         self
     }
@@ -76,10 +76,16 @@ impl Schema {
     fn update_relations(
         &mut self,
         i: Idx,
+        multiple: bool,
         required: bool,
         requires: Vec<Id>,
         conflicts_with: Vec<Id>,
     ) {
+        debug_assert!(!self.exclusives.iter().any(|&t| i == t));
+        if !multiple {
+            self.exclusives.push(i);
+        }
+
         debug_assert!(!self.required.iter().any(|&t| i == t));
         if required {
             self.required.push(i);
@@ -88,42 +94,45 @@ impl Schema {
         debug_assert!(!self.requirements.contains_key(&i));
         if !requires.is_empty() {
             self.requirements
-                .insert(i, requires.into_iter().map(self.ids.as_map()).collect());
+                .insert(i, requires.into_iter().map(self.i.as_map()).collect());
         }
 
         debug_assert!(!self.conflicts.contains_key(&i));
         if !conflicts_with.is_empty() {
-            self.conflicts.insert(
-                i,
-                conflicts_with.into_iter().map(self.ids.as_map()).collect(),
-            );
+            self.conflicts
+                .insert(i, conflicts_with.into_iter().map(self.i.as_map()).collect());
         }
     }
 
-    pub(crate) fn get_idx(&self, id: impl AsRef<str>) -> Option<Idx> {
-        self.ids.get(id.as_ref())
+    pub(crate) fn ensure_all_registered(&self) {
+        assert_eq!(self.i.ids.len(), self.i.infos.len());
+        self.i.infos.iter().for_each(|inf| {
+            if matches!(inf.kind, InfoKind::Unregistered) {
+                panic!("`{}` is referred but not registered", inf.id);
+            }
+        })
     }
 
-    pub(crate) fn get_info(&self, i: Idx) -> Option<&Info> {
-        self.ids.get_info(i)
-    }
-
-    pub(crate) fn ensure_arg_registered(&self, i: Idx) {
-        self.get_info(i).map_or_else(
+    pub(crate) fn ensure_arg_registered(&self, i: Idx) -> &ArgInfo {
+        self.i.get_info(i).map_or_else(
             || panic!("argument does not exist"),
             |inf| {
-                if !matches!(inf.kind, InfoKind::Arg(_)) {
+                if let InfoKind::Arg(inf) = &inf.kind {
+                    inf
+                } else {
                     panic!("`{}` is not registered as an argument", inf.id);
                 }
             },
         )
     }
 
-    pub(crate) fn ensure_group_registered(&self, i: Idx) {
-        self.get_info(i).map_or_else(
+    pub(crate) fn ensure_group_registered(&self, i: Idx) -> &ArgGroupInfo {
+        self.i.get_info(i).map_or_else(
             || panic!("group does not exist"),
             |inf| {
-                if !matches!(inf.kind, InfoKind::ArgGroup(_)) {
+                if let InfoKind::ArgGroup(inf) = &inf.kind {
+                    inf
+                } else {
                     panic!("`{}` is not registered as a group", inf.id);
                 }
             },
@@ -135,13 +144,7 @@ impl Schema {
     }
 
     fn _init_arg<T>(&self, id: Id) -> Arg<T> {
-        let i = self
-            .get_idx(&id)
-            .unwrap_or_else(|| panic!("argument `{}` is unregistered", id));
-        if is_debug!() {
-            self.ensure_arg_registered(i)
-        };
-        Arg::new(i)
+        Arg::new(self.i.ensure(&id))
     }
 
     pub fn init_group(&self, id: impl Into<Id>) -> ArgGroup {
@@ -149,13 +152,7 @@ impl Schema {
     }
 
     fn _init_group(&self, id: Id) -> ArgGroup {
-        let i = self
-            .get_idx(&id)
-            .unwrap_or_else(|| panic!("group `{}` is unregistered", id));
-        if is_debug!() {
-            self.ensure_group_registered(i);
-        }
-        ArgGroup::new(i)
+        ArgGroup::new(self.i.ensure(&id))
     }
 }
 
@@ -181,14 +178,12 @@ pub(crate) enum InfoKind {
 #[derive(Debug)]
 pub(crate) struct ArgInfo {
     pub typ: ArgType,
-    pub action: ArgAction,
     pub help: Box<str>,
 }
 
 #[derive(Debug)]
 pub(crate) struct ArgGroupInfo {
     pub members: Vec<Idx>,
-    pub multiple: bool,
 }
 
 impl IdMap {
@@ -201,7 +196,7 @@ impl IdMap {
         if let Some(&i) = self.ids.get(&id) {
             return i;
         }
-        let i = self.infos.len();
+        let i = self.ids.len();
         self.ids.insert(id.clone(), i);
         self.infos.push(Info {
             id,
@@ -212,18 +207,25 @@ impl IdMap {
 
     pub fn register(&mut self, i: Idx, kind: InfoKind) {
         debug_assert!(!matches!(kind, InfoKind::Unregistered));
-        let inf = self
-            .infos
-            .get_mut(i)
-            .unwrap_or_else(|| unreachable!("unknown index"));
+        let inf = &mut self.infos[i];
         match inf.kind {
             InfoKind::Unregistered => inf.kind = kind,
-            _ => panic!("`{}` has been registered", inf.id),
+            InfoKind::Arg(_) => panic!("`{}` has been registered as an argument", inf.id),
+            InfoKind::ArgGroup(_) => panic!("`{}` has been registered as a group", inf.id),
         }
     }
 
-    pub fn get(&self, id: &str) -> Option<Idx> {
-        self.ids.get(id).copied()
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    pub fn get(&self, id: impl AsRef<str>) -> Option<Idx> {
+        self.ids.get(id.as_ref()).copied()
+    }
+
+    pub fn ensure(&self, id: &Id) -> Idx {
+        self.get(id)
+            .unwrap_or_else(|| panic!("`{}` is not registered", id))
     }
 
     pub fn get_info(&self, i: Idx) -> Option<&Info> {
@@ -231,26 +233,28 @@ impl IdMap {
     }
 }
 
+impl std::ops::Index<Idx> for IdMap {
+    type Output = Info;
+
+    fn index(&self, i: Idx) -> &Self::Output {
+        &self.infos[i]
+    }
+}
+
+impl std::ops::IndexMut<Idx> for IdMap {
+    fn index_mut(&mut self, i: Idx) -> &mut Self::Output {
+        &mut self.infos[i]
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct ArgSchema {
     typ: ArgType,
-    action: ArgAction,
     help: String,
+    multiple: bool,
     required: bool,
     requires: Vec<Id>,
     conflicts_with: Vec<Id>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ArgAction {
-    Append,
-    Set,
-}
-
-impl Default for ArgAction {
-    fn default() -> Self {
-        ArgAction::Append
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -289,8 +293,8 @@ impl ArgSchema {
         self.typ(ArgType::Help)
     }
 
-    pub fn action(&mut self, action: ArgAction) -> &mut Self {
-        self.action = action;
+    pub fn multiple(&mut self) -> &mut Self {
+        self.multiple = true;
         self
     }
 
@@ -449,10 +453,19 @@ mod schema_field_type {
 
 pub trait SchemaFieldType: 'static + schema_field_type::Sealed {}
 
-pub trait Args {
+pub trait Args: Sized {
     fn schema() -> Schema;
 
     fn init(schema: &Schema) -> Self;
 
-    fn parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a>;
+    fn init_parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a>;
+
+    fn parse(tokens: syn::parse::ParseStream) -> syn::Result<Self> {
+        let schema = Self::schema();
+        let mut args = Self::init(&schema);
+        let mut parser = args.init_parser(&schema);
+        parser.parse(tokens)?;
+        parser.finish()?;
+        Ok(args)
+    }
 }

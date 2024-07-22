@@ -42,7 +42,7 @@ macro_rules! define_args {
             }
 
             #[allow(unused_mut)]
-            fn parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a> {
+            fn init_parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a> {
                 let mut parser = Parser::new(schema);
                 $(<$f_ty as schema_field_type::Sealed>::add_to_parser(
                     &mut parser,
@@ -82,7 +82,7 @@ fn test_parse() {
         |tokens: syn::parse::ParseStream| -> syn::Result<()> {
             let schema = MyArgs::schema();
             let mut my_args = MyArgs::init(&schema);
-            let mut parser = my_args.parser(&schema);
+            let mut parser = my_args.init_parser(&schema);
             parser.parse(tokens)?;
             parser.finish()?;
             panic!("{:#?}", my_args);

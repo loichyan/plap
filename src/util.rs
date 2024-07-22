@@ -1,21 +1,26 @@
 use std::ops;
 
 #[derive(Default)]
-pub struct ErrorCollector {
-    inner: Option<syn::Error>,
-}
+pub struct Errors(Option<syn::Error>);
 
-impl ErrorCollector {
+impl Errors {
     pub fn combine(&mut self, e: syn::Error) {
-        if let Some(err) = self.inner.as_mut() {
+        if let Some(err) = self.0.as_mut() {
             err.combine(e);
         } else {
-            self.inner = Some(e);
+            self.0 = Some(e);
         }
     }
 
     pub fn take(&mut self) -> Option<syn::Error> {
-        self.inner.take()
+        self.0.take()
+    }
+
+    pub fn fail(self) -> syn::Result<()> {
+        match self.0 {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 }
 

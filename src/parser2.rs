@@ -1,9 +1,8 @@
 use std::any::Any;
-use std::collections::BTreeMap;
 
 use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
-use syn::{parenthesized, Token};
+use syn::{parenthesized, LitStr, Token};
 
 use crate::id::Id;
 use crate::schema::*;
@@ -50,17 +49,34 @@ impl ArgGroup {
 }
 
 pub struct Parser<'a> {
-    s: &'a Schema,
-    args: BTreeMap<Idx, &'a mut dyn AnyArg>,
-    errors: Option<syn::Error>,
+    pub(crate) schema: &'a Schema,
+    pub(crate) values: Vec<Value<'a>>,
+    pub(crate) errors: crate::util::Errors,
+}
+
+pub(crate) enum Value<'a> {
+    None,
+    Arg(&'a mut dyn AnyArg),
+    Group(&'a ArgGroup),
 }
 
 impl<'a> Parser<'a> {
     pub fn new(schema: &'a Schema) -> Self {
         Self {
-            s: schema,
-            args: <_>::default(),
+            schema,
+            values: std::iter::repeat_with(|| Value::None)
+                .take(schema.i.len())
+                .collect(),
             errors: <_>::default(),
+        }
+    }
+
+    fn add(&mut self, i: Idx, value: Value<'a>) {
+        let val = &mut self.values[i];
+        match val {
+            Value::None => *val = value,
+            Value::Arg(_) => panic!("`{}` has been added as an argument", self.schema.i[i].id),
+            Value::Group(_) => panic!("`{}` has been added as a group", self.schema.i[i].id),
         }
     }
 
@@ -68,17 +84,14 @@ impl<'a> Parser<'a> {
     where
         T: 'static + syn::parse::Parse,
     {
-        if is_debug!() {
-            self.s.ensure_arg_registered(arg.i);
-        }
-        self.args.insert(arg.i, arg);
+        self.schema.ensure_arg_registered(arg.i);
+        self.add(arg.i, Value::Arg(arg));
         self
     }
 
     pub fn add_group(&mut self, group: &'a ArgGroup) -> &mut Self {
-        if is_debug!() {
-            self.s.ensure_group_registered(group.i);
-        }
+        self.schema.ensure_group_registered(group.i);
+        self.add(group.i, Value::Group(group));
         self
     }
 
@@ -87,14 +100,13 @@ impl<'a> Parser<'a> {
     }
 
     fn _get_arg<T: 'static>(&self, id: Id) -> Option<&Arg<T>> {
-        self.s
-            .get_idx(&id)
-            .and_then(|id| self.args.get(&id))
-            .map(|arg| {
-                arg.as_any()
-                    .downcast_ref()
-                    .unwrap_or_else(|| panic!("argument type mismatched"))
-            })
+        self.schema.i.get(&id).and_then(|i| {
+            if let Value::Arg(arg) = &self.values[i] {
+                arg.as_any().downcast_ref()
+            } else {
+                None
+            }
+        })
     }
 
     pub fn get_arg_mut<T: 'static>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
@@ -102,14 +114,13 @@ impl<'a> Parser<'a> {
     }
 
     fn _get_arg_mut<T: 'static>(&mut self, id: Id) -> Option<&mut Arg<T>> {
-        self.s
-            .get_idx(&id)
-            .and_then(|id| self.args.get_mut(&id))
-            .map(|arg| {
-                arg.as_any_mut()
-                    .downcast_mut()
-                    .unwrap_or_else(|| panic!("argument type mismatched"))
-            })
+        self.schema.i.get(&id).and_then(|i| {
+            if let Value::Arg(arg) = &mut self.values[i] {
+                arg.as_any_mut().downcast_mut()
+            } else {
+                None
+            }
+        })
     }
 
     pub fn parse(&mut self, tokens: ParseStream) -> syn::Result<()> {
@@ -119,11 +130,7 @@ impl<'a> Parser<'a> {
             }
 
             if let Err(e) = self.parse_next(tokens) {
-                if let Some(ref mut err) = self.errors {
-                    err.combine(e);
-                } else {
-                    self.errors = Some(e);
-                }
+                self.errors.combine(e);
             }
 
             // consume all tokens till the next comma
@@ -135,27 +142,23 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_next(&mut self, tokens: ParseStream) -> syn::Result<()> {
-        let ident = tokens.parse::<Ident>()?;
-        let span = ident.span();
-        let name = ident.to_string();
-        let i = self
-            .s
-            .get_idx(&name)
-            .ok_or_else(|| syn_error!(span, "unknown argument"))?;
+        let span = tokens.span();
+        let ident = tokens.parse::<Ident>()?.to_string();
 
-        let inf = match &self
-            .s
-            .get_info(i)
-            .unwrap_or_else(|| unreachable!("unknown index"))
-            .kind
-        {
-            InfoKind::Arg(i) => i,
-            _ => panic!("`{}` is not registered as an argument", name),
-        };
-        let arg = self
-            .args
-            .get_mut(&i)
-            .unwrap_or_else(|| panic!("`{}` is not added to parser", name));
+        let (arg, inf) = self
+            .schema
+            .i
+            .get(&ident)
+            .and_then(|i| {
+                if let (Value::Arg(arg), InfoKind::Arg(inf)) =
+                    (&mut self.values[i], &self.schema.i[i].kind)
+                {
+                    Some((arg, inf))
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| syn_error!(span, "unknown argument"))?;
 
         match inf.typ {
             ArgType::Expr | ArgType::Flag => {
@@ -167,7 +170,7 @@ impl<'a> Parser<'a> {
                     arg.parse_value(span, &content)?;
                 } else if inf.typ == ArgType::Flag && (tokens.peek(Token![,]) || tokens.is_empty())
                 {
-                    arg.parse_value_from_str(span, "true")?;
+                    arg.parse_value_from_str(span, LitStr::new("true", span))?;
                 } else {
                     return Err(syn_error!(
                         span,
@@ -177,8 +180,8 @@ impl<'a> Parser<'a> {
             }
             ArgType::TokenTree => {
                 if tokens.parse::<Option<Token![=]>>()?.is_some() {
-                    let content = tokens.parse::<syn::LitStr>()?.value();
-                    arg.parse_value_from_str(span, &content)?;
+                    let content = tokens.parse::<syn::LitStr>()?;
+                    arg.parse_value_from_str(span, content)?;
                 } else if tokens.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in tokens);
@@ -192,7 +195,7 @@ impl<'a> Parser<'a> {
             }
             ArgType::Help => {
                 // TODO: show more usage
-                arg.parse_value_from_str(span, "")?;
+                arg.parse_value_from_str(span, LitStr::new("", span))?;
                 return Err(syn_error!(span, &inf.help));
             }
         }
@@ -201,16 +204,12 @@ impl<'a> Parser<'a> {
     }
 
     pub fn finish(self) -> syn::Result<()> {
-        // TODO: validation
-        match self.errors {
-            Some(e) => Err(e),
-            None => Ok(()),
-        }
+        crate::validate::validate(self)
     }
 }
 
 /// A type earsed and object safe [`Arg<T>`].
-trait AnyArg {
+pub(crate) trait AnyArg {
     fn as_any(&self) -> &dyn Any;
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -218,8 +217,6 @@ trait AnyArg {
     fn spans(&self) -> &[Span];
 
     fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()>;
-
-    fn parse_value_from_str(&mut self, span: Span, tokens: &str) -> syn::Result<()>;
 }
 
 impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
@@ -239,9 +236,12 @@ impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
         self.add_value(span, tokens.parse()?);
         Ok(())
     }
+}
 
-    fn parse_value_from_str(&mut self, span: Span, tokens: &str) -> syn::Result<()> {
-        self.add_value(span, syn::parse_str(tokens)?);
-        Ok(())
+trait AnyArgExt: AnyArg {
+    fn parse_value_from_str(&mut self, span: Span, tokens: LitStr) -> syn::Result<()> {
+        tokens.parse_with(|tokens: ParseStream| self.parse_value(span, tokens))
     }
 }
+
+impl<T: ?Sized + AnyArg> AnyArgExt for T {}
