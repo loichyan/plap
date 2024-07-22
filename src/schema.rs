@@ -1,12 +1,13 @@
-use std::any::Any;
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
+
 use std::collections::BTreeMap;
 
-use proc_macro2::Span;
-use syn::parse::ParseStream;
-
 use crate::id::Id;
+use crate::parser2::{Arg, ArgGroup, Parser};
 
-type Idx = usize;
+pub(crate) type Idx = usize;
 
 #[derive(Debug, Default)]
 pub struct Schema {
@@ -99,23 +100,48 @@ impl Schema {
         }
     }
 
+    pub(crate) fn get_idx(&self, id: impl AsRef<str>) -> Option<Idx> {
+        self.ids.get(id.as_ref())
+    }
+
+    pub(crate) fn get_info(&self, i: Idx) -> Option<&Info> {
+        self.ids.get_info(i)
+    }
+
+    pub(crate) fn ensure_arg_registered(&self, i: Idx) {
+        self.get_info(i).map_or_else(
+            || panic!("argument does not exist"),
+            |inf| {
+                if !matches!(inf.kind, InfoKind::Arg(_)) {
+                    panic!("`{}` is not registered as an argument", inf.id);
+                }
+            },
+        )
+    }
+
+    pub(crate) fn ensure_group_registered(&self, i: Idx) {
+        self.get_info(i).map_or_else(
+            || panic!("group does not exist"),
+            |inf| {
+                if !matches!(inf.kind, InfoKind::ArgGroup(_)) {
+                    panic!("`{}` is not registered as a group", inf.id);
+                }
+            },
+        )
+    }
+
     pub fn init_arg<T>(&self, id: impl Into<Id>) -> Arg<T> {
         self._init_arg(id.into())
     }
 
     fn _init_arg<T>(&self, id: Id) -> Arg<T> {
         let i = self
-            .ids
-            .get(&id)
+            .get_idx(&id)
             .unwrap_or_else(|| panic!("argument `{}` is unregistered", id));
         if is_debug!() {
-            self.ids.ensure_arg_registered(i)
+            self.ensure_arg_registered(i)
         };
-        Arg {
-            i,
-            values: <_>::default(),
-            spans: <_>::default(),
-        }
+        Arg::new(i)
     }
 
     pub fn init_group(&self, id: impl Into<Id>) -> ArgGroup {
@@ -124,33 +150,45 @@ impl Schema {
 
     fn _init_group(&self, id: Id) -> ArgGroup {
         let i = self
-            .ids
-            .get(&id)
+            .get_idx(&id)
             .unwrap_or_else(|| panic!("group `{}` is unregistered", id));
         if is_debug!() {
-            self.ids.ensure_group_registered(i);
+            self.ensure_group_registered(i);
         }
-        ArgGroup { i }
+        ArgGroup::new(i)
     }
 }
 
 #[derive(Debug, Default)]
-struct IdMap {
+pub(crate) struct IdMap {
     ids: BTreeMap<Id, Idx>,
     infos: Vec<Info>,
 }
 
 #[derive(Debug)]
-struct Info {
-    id: Id,
-    kind: InfoKind,
+pub(crate) struct Info {
+    pub id: Id,
+    pub kind: InfoKind,
 }
 
 #[derive(Debug)]
-enum InfoKind {
+pub(crate) enum InfoKind {
     Unregistered,
     Arg(ArgInfo),
     ArgGroup(ArgGroupInfo),
+}
+
+#[derive(Debug)]
+pub(crate) struct ArgInfo {
+    pub typ: ArgType,
+    pub action: ArgAction,
+    pub help: Box<str>,
+}
+
+#[derive(Debug)]
+pub(crate) struct ArgGroupInfo {
+    pub members: Vec<Idx>,
+    pub multiple: bool,
 }
 
 impl IdMap {
@@ -184,34 +222,12 @@ impl IdMap {
         }
     }
 
-    pub fn get(&self, id: &Id) -> Option<Idx> {
+    pub fn get(&self, id: &str) -> Option<Idx> {
         self.ids.get(id).copied()
     }
 
     pub fn get_info(&self, i: Idx) -> Option<&Info> {
         self.infos.get(i)
-    }
-
-    pub fn ensure_arg_registered(&self, i: Idx) {
-        self.get_info(i).map_or_else(
-            || panic!("argument does not exist"),
-            |inf| {
-                if !matches!(inf.kind, InfoKind::Arg(_)) {
-                    panic!("`{}` is not registered as an argument", inf.id);
-                }
-            },
-        )
-    }
-
-    pub fn ensure_group_registered(&self, i: Idx) {
-        self.get_info(i).map_or_else(
-            || panic!("group does not exist"),
-            |inf| {
-                if !matches!(inf.kind, InfoKind::ArgGroup(_)) {
-                    panic!("`{}` is not registered as a group", inf.id);
-                }
-            },
-        )
     }
 }
 
@@ -223,13 +239,6 @@ pub struct ArgSchema {
     required: bool,
     requires: Vec<Id>,
     conflicts_with: Vec<Id>,
-}
-
-#[derive(Debug)]
-struct ArgInfo {
-    typ: ArgType,
-    action: ArgAction,
-    help: Box<str>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -331,12 +340,6 @@ pub struct ArgGroupSchema {
     conflicts_with: Vec<Id>,
 }
 
-#[derive(Debug)]
-struct ArgGroupInfo {
-    members: Vec<Idx>,
-    multiple: bool,
-}
-
 impl ArgGroupSchema {
     #[doc(hidden)]
     pub fn help(&mut self, _help: &str) -> &mut Self {
@@ -393,112 +396,8 @@ impl ArgGroupSchema {
     }
 }
 
-pub struct Parser<'a> {
-    s: &'a Schema,
-    args: BTreeMap<Idx, &'a mut dyn AnyArg>,
-    unknowns: Vec<Span>,
-    errors: Vec<syn::Error>,
-}
-
-impl<'a> Parser<'a> {
-    pub fn new(schema: &'a Schema) -> Self {
-        Self {
-            s: schema,
-            args: <_>::default(),
-            unknowns: <_>::default(),
-            errors: <_>::default(),
-        }
-    }
-
-    pub fn add_arg<T>(&mut self, arg: &'a mut Arg<T>) -> &mut Self
-    where
-        T: 'static + syn::parse::Parse,
-    {
-        if is_debug!() {
-            self.s.ids.ensure_arg_registered(arg.i);
-        }
-        self.args.insert(arg.i, arg);
-        self
-    }
-
-    pub fn add_group(&mut self, group: &'a ArgGroup) -> &mut Self {
-        if is_debug!() {
-            self.s.ids.ensure_group_registered(group.i);
-        }
-        self
-    }
-
-    pub fn get_arg<T: 'static>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
-        self._get_arg(id.into())
-    }
-
-    fn _get_arg<T: 'static>(&self, id: Id) -> Option<&Arg<T>> {
-        self.s
-            .ids
-            .get(&id)
-            .and_then(|id| self.args.get(&id))
-            .map(|arg| {
-                arg.as_any()
-                    .downcast_ref()
-                    .unwrap_or_else(|| panic!("argument type mismatched"))
-            })
-    }
-
-    pub fn get_arg_mut<T: 'static>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
-        self._get_arg_mut(id.into())
-    }
-
-    fn _get_arg_mut<T: 'static>(&mut self, id: Id) -> Option<&mut Arg<T>> {
-        self.s
-            .ids
-            .get(&id)
-            .and_then(|id| self.args.get_mut(&id))
-            .map(|arg| {
-                arg.as_any_mut()
-                    .downcast_mut()
-                    .unwrap_or_else(|| panic!("argument type mismatched"))
-            })
-    }
-
-    pub fn parse(&mut self, _tokens: ParseStream) {
-        todo!()
-    }
-
-    pub fn finish(self) -> syn::Result<()> {
-        todo!()
-    }
-}
-
-trait AnyArg {
-    fn as_any(&self) -> &dyn Any;
-
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-
-    fn spans(&self) -> &[Span];
-
-    fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()>;
-}
-
-impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn spans(&self) -> &[Span] {
-        &self.spans
-    }
-
-    fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()> {
-        self.add_value(span, tokens.parse()?);
-        Ok(())
-    }
-}
-
 mod schema_field_type {
+
     use super::*;
 
     pub trait Sealed: 'static {
@@ -550,106 +449,10 @@ mod schema_field_type {
 
 pub trait SchemaFieldType: 'static + schema_field_type::Sealed {}
 
-pub struct Arg<T> {
-    i: Idx,
-    spans: Vec<Span>,
-    values: Vec<T>,
-}
-
-impl<T> Arg<T> {
-    pub fn schema() -> ArgSchema {
-        ArgSchema::default()
-    }
-
-    pub fn add_value(&mut self, span: Span, value: T) {
-        self.spans.push(span);
-        self.values.push(value);
-    }
-}
-
-pub struct ArgGroup {
-    i: Idx,
-}
-
-impl ArgGroup {
-    pub fn schema() -> ArgGroupSchema {
-        ArgGroupSchema::default()
-    }
-}
-
 pub trait Args {
     fn schema() -> Schema;
 
     fn init(schema: &Schema) -> Self;
 
     fn parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a>;
-}
-
-macro_rules! define_args {
-    (
-        $vis:vis struct
-        $name:ident {$(
-            $(#[doc = $doc:literal])*
-            $(#[plap($($attr:ident $(= $attr_val:expr)?),* $(,)?)])*
-            $f_vis:vis $f_name:ident : $f_ty:ty,
-        )*}) => {
-        $vis struct $name { $($f_vis $f_name : $f_ty,)* }
-
-        impl Args for $name {
-            #[allow(unused_mut)]
-            fn schema() -> Schema {
-                let mut schema = Schema::default();
-                $(<$f_ty as schema_field_type::Sealed>::register_to(
-                    &mut schema,
-                    Id::from(stringify!($f_name)),
-                    {
-                        let mut $f_name = <$f_ty as schema_field_type::Sealed>::Schema::default();
-                        $($f_name.help($doc);)*
-                        $($($f_name.$attr($($attr_val)*);)*)*
-                        $f_name
-                    },
-                );)*
-                schema
-            }
-
-            fn init(schema: &Schema) -> Self {
-                Self {
-                    $($f_name: <$f_ty as schema_field_type::Sealed>::init_from(
-                        schema,
-                        Id::from(stringify!($f_name)),
-                    ),)*
-                }
-            }
-
-            #[allow(unused_mut)]
-            fn parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a> {
-                let mut parser = Parser::new(schema);
-                $(<$f_ty as schema_field_type::Sealed>::add_to_parser(
-                    &mut parser,
-                    &mut self.$f_name,
-                );)*
-                parser
-            }
-        }
-    };
-}
-
-define_args! {
-    struct MyArgs {
-        /// Argument #1
-        #[plap(is_expr, required)]
-        arg1: Arg<syn::Ident>,
-        /// Argument #2
-        #[plap(is_flag, requires = "grp1")]
-        arg2: Arg<syn::LitBool>,
-        /// Argument #3
-        #[plap(is_token_tree, conflicts_with = "arg1")]
-        arg3: Arg<syn::LitInt>,
-        /// Show usage
-        #[plap(is_help)]
-        help: Arg<syn::parse::Nothing>,
-        /// Group #1
-        #[plap(member_all = ["arg1", "arg3"])]
-        grp1: ArgGroup,
-    }
 }

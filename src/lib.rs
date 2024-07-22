@@ -5,6 +5,7 @@ mod error;
 mod ext;
 pub mod id;
 mod parser;
+pub mod parser2;
 mod runtime;
 pub mod schema;
 

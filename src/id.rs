@@ -15,6 +15,12 @@ impl From<&'_ Id> for Id {
     }
 }
 
+impl std::borrow::Borrow<str> for Id {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl std::fmt::Display for Id {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.as_str().fmt(f)
