@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use proc_macro2::Span;
 use syn::parse::ParseStream;
@@ -11,11 +11,11 @@ type Idx = usize;
 #[derive(Debug, Default)]
 pub struct Schema {
     ids: IdMap,
-    required: BTreeSet<Idx>,
+    required: Vec<Idx>,
     /// Mutually exclusive groups
-    exclusions: BTreeSet<Idx>,
-    requirements: BTreeMap<Idx, BTreeSet<Idx>>,
-    conflicts: BTreeMap<Idx, BTreeSet<Idx>>,
+    exclusions: Vec<Idx>,
+    requirements: BTreeMap<Idx, Vec<Idx>>,
+    conflicts: BTreeMap<Idx, Vec<Idx>>,
 }
 
 impl Schema {
@@ -46,7 +46,7 @@ impl Schema {
         self.ids.register(i, InfoKind::Arg(arg));
 
         if required {
-            self.required.insert(i);
+            self.required.push(i);
         }
         if !requires.is_empty() {
             self.requirements
@@ -82,10 +82,10 @@ impl Schema {
         self.ids.register(i, InfoKind::ArgGroup(group));
 
         if !multiple {
-            self.exclusions.insert(i);
+            self.exclusions.push(i);
         }
         if required {
-            self.required.insert(i);
+            self.required.push(i);
         }
         if !requires.is_empty() {
             self.requirements
@@ -335,7 +335,7 @@ pub struct ArgGroupSchema {
 
 #[derive(Debug)]
 struct ArgGroupInfo {
-    members: BTreeSet<Idx>,
+    members: Vec<Idx>,
 }
 
 impl ArgGroupSchema {
