@@ -1,6 +1,6 @@
 // Some implementation details are borrowed from: https://docs.rs/clap_builder/4.5.9/src/clap_builder/util/id.rs.html
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(inner::Inner);
 
 impl Id {
@@ -18,6 +18,12 @@ impl From<&'_ Id> for Id {
 impl std::borrow::Borrow<str> for Id {
     fn borrow(&self) -> &str {
         self.as_str()
+    }
+}
+
+impl std::fmt::Debug for Id {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
     }
 }
 

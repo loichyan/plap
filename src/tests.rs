@@ -64,14 +64,20 @@ define_args! {
         #[plap(is_flag, requires = "grp1")]
         arg2: Arg<syn::LitBool>,
         /// Argument #3
-        #[plap(is_token_tree, conflicts_with = "arg1")]
+        #[plap(is_token_tree, conflicts_with = "grp1")]
         arg3: Arg<syn::Type>,
+        /// Argument #4
+        #[plap(is_token_tree, requires = "help")]
+        arg4: Arg<syn::Type>,
         /// Show usage
         #[plap(is_help)]
         help: Arg<syn::parse::Nothing>,
         /// Group #1
-        #[plap(member_all = ["arg1", "arg3"])]
+        #[plap(multiple, member_all = ["arg1", "grp2"])]
         grp1: ArgGroup,
+        /// Group #2
+        #[plap(required, member_all = ["arg2", "arg4"])]
+        grp2: ArgGroup,
     }
 }
 
@@ -85,9 +91,15 @@ fn test_parse() {
             let mut parser = my_args.init_parser(&schema);
             parser.parse(tokens)?;
             parser.finish()?;
-            panic!("{:#?}", my_args);
+            panic!("{:#?}\n{:#?}", schema, my_args);
         },
-        quote!(arg1 = "value1", arg2 = false, arg3 = "Value2"),
+        quote!(
+            arg1 = "value1",
+            help = 12,
+            arg2 = false,
+            arg3 = "Value2",
+            arg4
+        ),
     )
     .unwrap();
 }

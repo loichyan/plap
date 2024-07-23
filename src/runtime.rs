@@ -85,7 +85,7 @@ impl Runtime {
     }
 
     pub fn add_error(&mut self, e: syn::Error) {
-        self.error.combine(e);
+        self.error.add(e);
     }
 
     pub fn finish(self, context: ParserContext) -> Result<()> {
@@ -110,7 +110,7 @@ impl Runtime {
             let msg = context.format(&err);
             spans
                 .iter()
-                .for_each(|span| error.combine(syn::Error::new(*span, &msg)));
+                .for_each(|span| error.add(syn::Error::new(*span, &msg)));
         };
         let to_name = |id: &Id| *names.get(id).expect("undefined `Id`");
         let supplied = |id: &Id| sources.get(id).is_some();

@@ -5,19 +5,20 @@ mod tests;
 use std::collections::BTreeMap;
 
 use crate::id::Id;
-use crate::parser2::{Arg, ArgGroup, Parser};
+use crate::parser2::*;
+use crate::util::FmtWith;
 
 pub(crate) type Idx = usize;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Schema {
     pub(crate) i: IdMap,
     /// The values of an exclusive argument are duplicated with each other. The
     /// members of an exclusive group conflict with each other.
     pub(crate) exclusives: Vec<Idx>,
     pub(crate) required: Vec<Idx>,
-    pub(crate) requirements: BTreeMap<Idx, Vec<Idx>>,
-    pub(crate) conflicts: BTreeMap<Idx, Vec<Idx>>,
+    pub(crate) requirements: Vec<(Idx, Vec<Idx>)>,
+    pub(crate) conflicts: Vec<(Idx, Vec<Idx>)>,
 }
 
 impl Schema {
@@ -64,10 +65,10 @@ impl Schema {
         } = schema;
 
         let i = self.i.of(id);
-        let group = ArgGroupInfo {
-            members: members.into_iter().map(self.i.as_map()).collect(),
+        let group = GroupInfo {
+            members: members.into_iter().map(self.i.by_of()).collect(),
         };
-        self.i.register(i, InfoKind::ArgGroup(group));
+        self.i.register(i, InfoKind::Group(group));
         self.update_relations(i, multiple, required, requires, conflicts_with);
 
         self
@@ -81,39 +82,39 @@ impl Schema {
         requires: Vec<Id>,
         conflicts_with: Vec<Id>,
     ) {
-        debug_assert!(!self.exclusives.iter().any(|&t| i == t));
+        debug_assert!(self.exclusives.iter().all(|t| *t != i));
         if !multiple {
             self.exclusives.push(i);
         }
 
-        debug_assert!(!self.required.iter().any(|&t| i == t));
+        debug_assert!(self.required.iter().all(|t| *t != i));
         if required {
             self.required.push(i);
         }
 
-        debug_assert!(!self.requirements.contains_key(&i));
+        debug_assert!(self.requirements.iter().all(|(t, _)| *t != i));
         if !requires.is_empty() {
             self.requirements
-                .insert(i, requires.into_iter().map(self.i.as_map()).collect());
+                .push((i, requires.into_iter().map(self.i.by_of()).collect()));
         }
 
-        debug_assert!(!self.conflicts.contains_key(&i));
+        debug_assert!(self.conflicts.iter().all(|(t, _)| *t != i));
         if !conflicts_with.is_empty() {
             self.conflicts
-                .insert(i, conflicts_with.into_iter().map(self.i.as_map()).collect());
+                .push((i, conflicts_with.into_iter().map(self.i.by_of()).collect()));
         }
     }
 
     pub(crate) fn ensure_all_registered(&self) {
         assert_eq!(self.i.ids.len(), self.i.infos.len());
         self.i.infos.iter().for_each(|inf| {
-            if matches!(inf.kind, InfoKind::Unregistered) {
+            if matches!(inf.kind, InfoKind::None) {
                 panic!("`{}` is referred but not registered", inf.id);
             }
         })
     }
 
-    pub(crate) fn ensure_arg_registered(&self, i: Idx) -> &ArgInfo {
+    pub(crate) fn ensure_arg(&self, i: Idx) -> &ArgInfo {
         self.i.get_info(i).map_or_else(
             || panic!("argument does not exist"),
             |inf| {
@@ -126,11 +127,11 @@ impl Schema {
         )
     }
 
-    pub(crate) fn ensure_group_registered(&self, i: Idx) -> &ArgGroupInfo {
+    pub(crate) fn ensure_group(&self, i: Idx) -> &GroupInfo {
         self.i.get_info(i).map_or_else(
             || panic!("group does not exist"),
             |inf| {
-                if let InfoKind::ArgGroup(inf) = &inf.kind {
+                if let InfoKind::Group(inf) = &inf.kind {
                     inf
                 } else {
                     panic!("`{}` is not registered as a group", inf.id);
@@ -156,6 +157,32 @@ impl Schema {
     }
 }
 
+impl std::fmt::Debug for Schema {
+    fn fmt<'a>(&'a self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let fmt_list = |list: &'a [Idx]| {
+            FmtWith(|f| {
+                f.debug_list()
+                    .entries(list.iter().copied().map(self.i.by_id()))
+                    .finish()
+            })
+        };
+        let fmt_map = |map: &'a [(Idx, Vec<Idx>)]| {
+            FmtWith(|f| {
+                f.debug_map()
+                    .entries(map.iter().map(|(i, v)| (&self.i[*i].id, fmt_list(v))))
+                    .finish()
+            })
+        };
+
+        f.debug_struct("Schema")
+            .field("exclusives", &fmt_list(&self.exclusives))
+            .field("required", &fmt_list(&self.required))
+            .field("requirements", &fmt_map(&self.requirements))
+            .field("conflicts", &fmt_map(&self.conflicts))
+            .finish()
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct IdMap {
     ids: BTreeMap<Id, Idx>,
@@ -170,9 +197,9 @@ pub(crate) struct Info {
 
 #[derive(Debug)]
 pub(crate) enum InfoKind {
-    Unregistered,
+    None,
     Arg(ArgInfo),
-    ArgGroup(ArgGroupInfo),
+    Group(GroupInfo),
 }
 
 #[derive(Debug)]
@@ -182,36 +209,40 @@ pub(crate) struct ArgInfo {
 }
 
 #[derive(Debug)]
-pub(crate) struct ArgGroupInfo {
+pub(crate) struct GroupInfo {
     pub members: Vec<Idx>,
 }
 
 impl IdMap {
-    pub fn as_map(&mut self) -> impl '_ + FnMut(Id) -> Idx {
+    pub fn by_of(&mut self) -> impl '_ + FnMut(Id) -> Idx {
         |id| self.of(id)
+    }
+
+    pub fn by_id<'a>(&'a self) -> impl '_ + Fn(Idx) -> &'a Id {
+        |i| &self[i].id
     }
 
     pub fn of(&mut self, id: Id) -> Idx {
         debug_assert_eq!(self.ids.len(), self.infos.len());
-        if let Some(&i) = self.ids.get(&id) {
-            return i;
+        if let Some(i) = self.ids.get(&id) {
+            return *i;
         }
         let i = self.ids.len();
         self.ids.insert(id.clone(), i);
         self.infos.push(Info {
             id,
-            kind: InfoKind::Unregistered,
+            kind: InfoKind::None,
         });
         i
     }
 
     pub fn register(&mut self, i: Idx, kind: InfoKind) {
-        debug_assert!(!matches!(kind, InfoKind::Unregistered));
+        debug_assert!(!matches!(kind, InfoKind::None));
         let inf = &mut self.infos[i];
         match inf.kind {
-            InfoKind::Unregistered => inf.kind = kind,
+            InfoKind::None => inf.kind = kind,
             InfoKind::Arg(_) => panic!("`{}` has been registered as an argument", inf.id),
-            InfoKind::ArgGroup(_) => panic!("`{}` has been registered as a group", inf.id),
+            InfoKind::Group(_) => panic!("`{}` has been registered as a group", inf.id),
         }
     }
 
