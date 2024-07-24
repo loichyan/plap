@@ -23,10 +23,10 @@ define_args! {
         help: Arg<syn::parse::Nothing>,
         /// Group #1
         #[plap(multiple, member_all = ["arg1", "grp2"])]
-        grp1: ArgGroup,
+        grp1: Group,
         /// Group #2
         #[plap(required, member_all = ["arg2", "arg4"])]
-        grp2: ArgGroup,
+        grp2: Group,
     }
 }
 
@@ -34,11 +34,11 @@ define_args! {
 #[should_panic]
 fn test_parse() {
     syn::parse::Parser::parse2(
-        |tokens: syn::parse::ParseStream| -> syn::Result<()> {
+        |input: syn::parse::ParseStream| -> syn::Result<()> {
             let schema = MyArgs::schema();
             let mut my_args = MyArgs::init(&schema);
             let mut parser = my_args.init_parser(&schema);
-            parser.parse(tokens)?;
+            parser.parse(input)?;
             parser.finish()?;
             panic!("{:#?}\n{:#?}", schema, my_args);
         },

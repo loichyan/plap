@@ -9,8 +9,8 @@ mod validate;
 #[doc(inline)]
 pub use {
     id::Id,
-    parser::{Arg, ArgGroup, Parser},
-    schema::{ArgGroupSchema, ArgSchema, Schema, SchemaFieldType},
+    parser::{Arg, Group, Parser},
+    schema::{ArgSchema, GroupSchema, Schema, SchemaFieldType},
 };
 
 pub trait Args: Sized {

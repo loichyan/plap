@@ -20,9 +20,9 @@ define_args! {
         help: Arg<syn::parse::Nothing>,
         /// Group #1
         #[plap(multiple, member_all = ["arg1", "grp2"])]
-        grp1: ArgGroup,
+        grp1: Group,
         /// Group #2
         #[plap(required, member_all = ["arg2", "arg4"])]
-        grp2: ArgGroup,
+        grp2: Group,
     }
 }

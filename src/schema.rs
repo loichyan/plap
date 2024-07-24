@@ -52,12 +52,12 @@ impl Schema {
         self
     }
 
-    pub fn register_group(&mut self, id: impl Into<Id>, schema: ArgGroupSchema) -> &mut Self {
+    pub fn register_group(&mut self, id: impl Into<Id>, schema: GroupSchema) -> &mut Self {
         self._register_group(id.into(), schema)
     }
 
-    fn _register_group(&mut self, id: Id, schema: ArgGroupSchema) -> &mut Self {
-        let ArgGroupSchema {
+    fn _register_group(&mut self, id: Id, schema: GroupSchema) -> &mut Self {
+        let GroupSchema {
             multiple,
             members,
             required,
@@ -149,12 +149,12 @@ impl Schema {
         Arg::new(self.i.ensure(&id))
     }
 
-    pub fn init_group(&self, id: impl Into<Id>) -> ArgGroup {
+    pub fn init_group(&self, id: impl Into<Id>) -> Group {
         self._init_group(id.into())
     }
 
-    fn _init_group(&self, id: Id) -> ArgGroup {
-        ArgGroup::new(self.i.ensure(&id))
+    fn _init_group(&self, id: Id) -> Group {
+        Group::new(self.i.ensure(&id))
     }
 }
 
@@ -368,7 +368,7 @@ impl ArgSchema {
 }
 
 #[derive(Debug, Default)]
-pub struct ArgGroupSchema {
+pub struct GroupSchema {
     members: Vec<Id>,
     multiple: bool,
     required: bool,
@@ -376,7 +376,7 @@ pub struct ArgGroupSchema {
     conflicts_with: Vec<Id>,
 }
 
-impl ArgGroupSchema {
+impl GroupSchema {
     #[doc(hidden)]
     pub fn help(&mut self, _help: impl AsRef<str>) -> &mut Self {
         self
@@ -463,8 +463,8 @@ pub(crate) mod schema_field_type {
 
     impl<T: 'static + syn::parse::Parse> SchemaFieldType for Arg<T> {}
 
-    impl Sealed for ArgGroup {
-        type Schema = ArgGroupSchema;
+    impl Sealed for Group {
+        type Schema = GroupSchema;
 
         fn register_to(target: &mut Schema, name: Id, schema: Self::Schema) {
             target.register_group(name, schema);
@@ -479,7 +479,7 @@ pub(crate) mod schema_field_type {
         }
     }
 
-    impl SchemaFieldType for ArgGroup {}
+    impl SchemaFieldType for Group {}
 }
 
 pub trait SchemaFieldType: 'static + schema_field_type::Sealed {}

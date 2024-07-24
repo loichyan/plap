@@ -42,13 +42,13 @@ impl<T> Arg<T> {
 }
 
 #[derive(Debug)]
-pub struct ArgGroup {
+pub struct Group {
     i: Idx,
 }
 
-impl ArgGroup {
-    pub fn schema() -> ArgGroupSchema {
-        ArgGroupSchema::default()
+impl Group {
+    pub fn schema() -> GroupSchema {
+        GroupSchema::default()
     }
 
     pub(crate) fn new(i: Idx) -> Self {
@@ -79,7 +79,7 @@ pub(crate) enum ValueState {
 pub(crate) enum ValueKind<'a> {
     None,
     Arg(&'a mut dyn AnyArg, &'a ArgInfo),
-    Group(&'a mut ArgGroup, &'a GroupInfo),
+    Group(&'a mut Group, &'a GroupInfo),
 }
 
 impl<'a> Parser<'a> {
@@ -117,7 +117,7 @@ impl<'a> Parser<'a> {
         self
     }
 
-    pub fn add_group(&mut self, group: &'a mut ArgGroup) -> &mut Self {
+    pub fn add_group(&mut self, group: &'a mut Group) -> &mut Self {
         let i = group.i;
         self.add(i, ValueKind::Group(group, self.schema.ensure_group(i)));
         self
