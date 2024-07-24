@@ -1,0 +1,27 @@
+[package]
+name = "plap-derive"
+version = "0.0.0"
+publish = false
+authors = ["Loi Chyan <loichyan@foxmail.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+rust-version = "1.56"
+
+description = "Derive macros of plap for testing"
+keywords = []
+categories = []
+repository = "https://github.com/loichyan/plap"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+plap = { version = "=0.0.0", path = "..", features = ["string"] }
+proc-macro2 = "1.0"
+quote = { version = "1.0" }
+syn = { version = "2.0", default-features = false, features = [
+    "derive",
+    "full",
+    "parsing",
+    "proc-macro",
+] }

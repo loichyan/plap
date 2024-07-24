@@ -1,3 +1,6 @@
+[workspace]
+members = ["derive"]
+
 [package]
 name = "plap"
 version = "0.0.0"
@@ -7,7 +10,8 @@ edition = "2021"
 rust-version = "1.56"
 
 description = "An argument parser for proc-macros"
-readme = "README.md"
+keywords = []
+categories = []
 repository = "https://github.com/loichyan/plap"
 
 [features]
@@ -15,14 +19,15 @@ default = []
 string = []
 
 [dependencies]
-proc-macro2 = "1.0"
+proc-macro2 = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false, features = ["parsing"] }
 
 [dev-dependencies]
-trybuild = "1.0"
+plap-derive = { path = "derive" }
+quote = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false, features = [
     "extra-traits",
     "full",
     "parsing",
 ] }
-quote = { version = "1.0", default-features = false }
+trybuild = "1.0"
