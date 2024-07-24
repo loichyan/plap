@@ -325,13 +325,13 @@ impl ArgSchema {
         self.typ(ArgType::Help)
     }
 
-    pub fn multiple(&mut self) -> &mut Self {
-        self.multiple = true;
+    pub fn help(&mut self, help: impl AsRef<str>) -> &mut Self {
+        self.help.push_str(help.as_ref().trim());
         self
     }
 
-    pub fn help(&mut self, help: &str) -> &mut Self {
-        self.help.push_str(help.trim());
+    pub fn multiple(&mut self) -> &mut Self {
+        self.multiple = true;
         self
     }
 
@@ -378,7 +378,7 @@ pub struct ArgGroupSchema {
 
 impl ArgGroupSchema {
     #[doc(hidden)]
-    pub fn help(&mut self, _help: &str) -> &mut Self {
+    pub fn help(&mut self, _help: impl AsRef<str>) -> &mut Self {
         self
     }
 
@@ -432,8 +432,7 @@ impl ArgGroupSchema {
     }
 }
 
-mod schema_field_type {
-
+pub(crate) mod schema_field_type {
     use super::*;
 
     pub trait Sealed: 'static {
@@ -484,20 +483,3 @@ mod schema_field_type {
 }
 
 pub trait SchemaFieldType: 'static + schema_field_type::Sealed {}
-
-pub trait Args: Sized {
-    fn schema() -> Schema;
-
-    fn init(schema: &Schema) -> Self;
-
-    fn init_parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a>;
-
-    fn parse(tokens: syn::parse::ParseStream) -> syn::Result<Self> {
-        let schema = Self::schema();
-        let mut args = Self::init(&schema);
-        let mut parser = args.init_parser(&schema);
-        parser.parse(tokens)?;
-        parser.finish()?;
-        Ok(args)
-    }
-}

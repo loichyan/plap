@@ -1,7 +1,4 @@
-use quote::quote;
-
-use super::*;
-use crate::*;
+use plap::*;
 
 define_args! {
     #[derive(Debug)]
@@ -28,27 +25,4 @@ define_args! {
         #[plap(required, member_all = ["arg2", "arg4"])]
         grp2: ArgGroup,
     }
-}
-
-#[test]
-#[should_panic]
-fn test_parse() {
-    syn::parse::Parser::parse2(
-        |tokens: syn::parse::ParseStream| -> syn::Result<()> {
-            let schema = MyArgs::schema();
-            let mut my_args = MyArgs::init(&schema);
-            let mut parser = my_args.init_parser(&schema);
-            parser.parse(tokens)?;
-            parser.finish()?;
-            panic!("{:#?}\n{:#?}", schema, my_args);
-        },
-        quote!(
-            arg1 = "value1",
-            help = 12,
-            arg2 = false,
-            arg3 = "Value2",
-            arg4
-        ),
-    )
-    .unwrap();
 }

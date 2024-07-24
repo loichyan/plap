@@ -31,6 +31,14 @@ impl<T> Arg<T> {
         self.spans.push(span);
         self.values.push(value);
     }
+
+    pub fn spans(&self) -> &[T] {
+        &self.values
+    }
+
+    pub fn values(&self) -> &[T] {
+        &self.values
+    }
 }
 
 #[derive(Debug)]
@@ -148,27 +156,27 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse(&mut self, tokens: ParseStream) -> syn::Result<()> {
+    pub fn parse(&mut self, input: ParseStream) -> syn::Result<()> {
         loop {
-            if tokens.is_empty() {
+            if input.is_empty() {
                 break;
             }
 
-            if let Err(e) = self.parse_next(tokens) {
+            if let Err(e) = self.parse_next(input) {
                 self.errors.add(e);
             }
 
-            // consume all tokens till the next comma
-            while tokens.parse::<Option<Token![,]>>()?.is_none() && !tokens.is_empty() {
-                tokens.parse::<proc_macro2::TokenTree>()?;
+            // consume all input till the next comma
+            while input.parse::<Option<Token![,]>>()?.is_none() && !input.is_empty() {
+                input.parse::<proc_macro2::TokenTree>()?;
             }
         }
         Ok(())
     }
 
-    fn parse_next(&mut self, tokens: ParseStream) -> syn::Result<()> {
-        let span = tokens.span();
-        let ident = tokens.parse::<Ident>()?.to_string();
+    fn parse_next(&mut self, input: ParseStream) -> syn::Result<()> {
+        let span = input.span();
+        let ident = input.parse::<Ident>()?.to_string();
 
         let (arg, inf) = self
             .schema
@@ -185,25 +193,25 @@ impl<'a> Parser<'a> {
 
         match inf.typ {
             ArgType::Expr | ArgType::Flag => {
-                if tokens.parse::<Option<Token![=]>>()?.is_some() {
-                    arg.parse_value(span, tokens)?;
-                } else if tokens.peek(syn::token::Paren) {
+                if input.parse::<Option<Token![=]>>()?.is_some() {
+                    arg.parse_value(span, input)?;
+                } else if input.peek(syn::token::Paren) {
                     let content;
-                    parenthesized!(content in tokens);
+                    parenthesized!(content in input);
                     arg.parse_value(span, &content)?;
-                } else if inf.typ == ArgType::Flag && is_eoa(tokens) {
+                } else if inf.typ == ArgType::Flag && is_eoa(input) {
                     parse_value_from_str(*arg, span, LitStr::new("true", span))?;
                 } else {
                     return Err(syn_error!(span, "expected `= <value>` or `(<value>)`"));
                 }
             }
             ArgType::TokenTree => {
-                if tokens.parse::<Option<Token![=]>>()?.is_some() {
-                    let content = tokens.parse::<syn::LitStr>()?;
+                if input.parse::<Option<Token![=]>>()?.is_some() {
+                    let content = input.parse::<syn::LitStr>()?;
                     parse_value_from_str(*arg, span, content)?;
-                } else if tokens.peek(syn::token::Paren) {
+                } else if input.peek(syn::token::Paren) {
                     let content;
-                    parenthesized!(content in tokens);
+                    parenthesized!(content in input);
                     arg.parse_value(span, &content)?;
                 } else {
                     return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
@@ -223,12 +231,12 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn is_eoa(tokens: ParseStream) -> bool {
-    tokens.peek(Token![,]) || tokens.is_empty()
+fn is_eoa(input: ParseStream) -> bool {
+    input.peek(Token![,]) || input.is_empty()
 }
 
-fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, tokens: LitStr) -> syn::Result<()> {
-    tokens.parse_with(|tokens: ParseStream| a.parse_value(span, tokens))
+fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, input: LitStr) -> syn::Result<()> {
+    input.parse_with(|input: ParseStream| a.parse_value(span, input))
 }
 
 /// A type earsed and object safe [`Arg<T>`].
@@ -239,7 +247,7 @@ pub(crate) trait AnyArg {
 
     fn spans(&self) -> &[Span];
 
-    fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()>;
+    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
 }
 
 impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
@@ -255,8 +263,8 @@ impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
         &self.spans
     }
 
-    fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()> {
-        self.add_value(span, tokens.parse()?);
+    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
+        self.add_value(span, input.parse()?);
         Ok(())
     }
 }
