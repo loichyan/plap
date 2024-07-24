@@ -17,7 +17,7 @@ impl Errors {
     }
 
     pub fn add_info(&mut self, span: Span, msg: impl std::fmt::Display) {
-        // TODO: how can we emit warnings/infos intead of errors?
+        // TODO: how can we emit warnings/infos instead of errors?
         self.add(syn_error!(span, msg));
     }
 

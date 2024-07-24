@@ -8,7 +8,7 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
         schema: parser.schema,
         values: &mut parser.values,
     };
-    let mut errors = parser.errors;
+    let errors = &mut parser.errors;
 
     // check if each argument or group is provided
     for i in 0..c.values.len() {
@@ -23,7 +23,22 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
         .copied()
         .filter(|i| c.provided_many(*i))
     {
-        c.emit_errors(&mut errors, i, || "value is duplicated");
+        match &c.value(i).kind {
+            ValueKind::Arg(..) => c.emit_errors(errors, i, || "value is duplicated"),
+            ValueKind::Group(_, g) => {
+                // each member conflicts with others
+                for (k, &i) in g.members.iter().enumerate() {
+                    c.visit(i, |_, arg| {
+                        for &span in arg.spans() {
+                            for &j in g.members[0..k].iter().chain(g.members[(k + 1)..].iter()) {
+                                errors.add(syn_error!(span, "conflicts with `{}`", c.name(j)));
+                            }
+                        }
+                    });
+                }
+            }
+            ValueKind::None => unreachable!(),
+        }
     }
 
     // check: required
@@ -40,7 +55,7 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
     // check: requirements
     for &(i, ref requirements) in c.schema.requirements.iter().filter(|(i, _)| c.provided(*i)) {
         for dest in requirements.iter().copied().filter(|i| !c.provided(*i)) {
-            c.emit_errors(&mut errors, i, || format!("requires `{}`", c.name(dest)));
+            c.emit_errors(errors, i, || format!("requires `{}`", c.name(dest)));
         }
     }
 
@@ -48,16 +63,12 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
     for &(i, ref conflicts) in c.schema.conflicts.iter().filter(|(i, _)| c.provided(*i)) {
         for dest in conflicts.iter().copied().filter(|i| c.provided(*i)) {
             // conflicts are always bidirectional
-            c.emit_errors(&mut errors, i, || {
-                format!("conflicts with `{}`", c.name(dest))
-            });
-            c.emit_errors(&mut errors, dest, || {
-                format!("conflicts with `{}`", c.name(i))
-            });
+            c.emit_errors(errors, i, || format!("conflicts with `{}`", c.name(dest)));
+            c.emit_errors(errors, dest, || format!("conflicts with `{}`", c.name(i)));
         }
     }
 
-    errors.fail()
+    parser.errors.fail()
 }
 
 struct Checker<'a, 'b> {

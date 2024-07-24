@@ -22,7 +22,7 @@ define_args! {
         #[plap(is_help)]
         help: Arg<syn::parse::Nothing>,
         /// Group #1
-        #[plap(multiple, member_all = ["arg1", "grp2"])]
+        #[plap(member_all = ["arg1", "grp2"])]
         grp1: Group,
         /// Group #2
         #[plap(required, member_all = ["arg2", "arg4"])]
@@ -47,7 +47,7 @@ fn test_parse() {
             help = 12,
             arg2 = false,
             arg3 = "Value2",
-            arg4
+            arg4 = "Value4",
         ),
     )
     .unwrap();
