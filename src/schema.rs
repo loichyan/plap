@@ -141,12 +141,16 @@ impl Schema {
         )
     }
 
-    pub fn init_arg<T>(&self, id: impl Into<Id>) -> Arg<T> {
-        self._init_arg(id.into())
+    pub fn init_arg<T: ArgParse>(&self, id: impl Into<Id>) -> Arg<T> {
+        self._init_arg(id.into(), <_>::default())
     }
 
-    fn _init_arg<T>(&self, id: Id) -> Arg<T> {
-        Arg::new(self.i.ensure(&id))
+    pub fn init_arg_with<T: ArgParse>(&self, id: impl Into<Id>, parser: T::Parser) -> Arg<T> {
+        self._init_arg(id.into(), parser)
+    }
+
+    fn _init_arg<T: ArgParse>(&self, id: Id, parser: T::Parser) -> Arg<T> {
+        Arg::new(self.i.ensure(&id), parser)
     }
 
     pub fn init_group(&self, id: impl Into<Id>) -> Group {

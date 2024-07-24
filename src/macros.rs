@@ -17,9 +17,9 @@ macro_rules! syn_error {
 macro_rules! define_args {
     ($(#[$attr:meta])*
     $vis:vis struct $name:ident {$(
-            $(#[doc = $doc:literal])*
-            $(#[plap($($plap:ident $(= $plap_val:expr)?),* $(,)?)])*
-            $f_vis:vis $f_name:ident : $f_ty:ty,
+        $(#[doc = $doc:literal])*
+        $(#[plap($($plap:ident $(= $plap_val:expr)?),* $(,)?)])*
+        $f_vis:vis $f_name:ident : $f_ty:ty,
     )*}) => {
         $(#[$attr])*
         $vis struct $name {$(

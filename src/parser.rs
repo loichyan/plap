@@ -8,20 +8,22 @@ use crate::id::Id;
 use crate::schema::*;
 
 #[derive(Debug)]
-pub struct Arg<T> {
+pub struct Arg<T: ArgParse> {
     i: Idx,
+    parser: T::Parser,
     spans: Vec<Span>,
     values: Vec<T>,
 }
 
-impl<T> Arg<T> {
+impl<T: ArgParse> Arg<T> {
     pub fn schema() -> ArgSchema {
         ArgSchema::default()
     }
 
-    pub(crate) fn new(i: Idx) -> Self {
+    pub(crate) fn new(i: Idx, parser: T::Parser) -> Self {
         Self {
             i,
+            parser,
             spans: <_>::default(),
             values: <_>::default(),
         }
@@ -128,11 +130,11 @@ impl<'a> Parser<'a> {
         self
     }
 
-    pub fn get_arg<T: 'static>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
+    pub fn get_arg<T: ArgParse>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
         self._get_arg(id.into())
     }
 
-    fn _get_arg<T: 'static>(&self, id: Id) -> Option<&Arg<T>> {
+    fn _get_arg<T: ArgParse>(&self, id: Id) -> Option<&Arg<T>> {
         self.schema.i.get(&id).and_then(|i| {
             if let ValueKind::Arg(arg, _) = &self.values[i].kind {
                 arg.as_any().downcast_ref()
@@ -142,11 +144,11 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn get_arg_mut<T: 'static>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
+    pub fn get_arg_mut<T: ArgParse>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
         self._get_arg_mut(id.into())
     }
 
-    fn _get_arg_mut<T: 'static>(&mut self, id: Id) -> Option<&mut Arg<T>> {
+    fn _get_arg_mut<T: ArgParse>(&mut self, id: Id) -> Option<&mut Arg<T>> {
         self.schema.i.get(&id).and_then(|i| {
             if let ValueKind::Arg(arg, _) = &mut self.values[i].kind {
                 arg.as_any_mut().downcast_mut()
@@ -200,7 +202,7 @@ impl<'a> Parser<'a> {
                     parenthesized!(content in input);
                     arg.parse_value(span, &content)?;
                 } else if inf.typ == ArgType::Flag && is_eoa(input) {
-                    parse_value_from_str(*arg, span, LitStr::new("true", span))?;
+                    parse_value_from_str(*arg, span, "true")?;
                 } else {
                     return Err(syn_error!(span, "expected `= <value>` or `(<value>)`"));
                 }
@@ -208,7 +210,7 @@ impl<'a> Parser<'a> {
             ArgType::TokenTree => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     let content = input.parse::<syn::LitStr>()?;
-                    parse_value_from_str(*arg, span, content)?;
+                    parse_value_from_literal(*arg, span, content)?;
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
@@ -218,7 +220,7 @@ impl<'a> Parser<'a> {
                 }
             }
             ArgType::Help => {
-                parse_value_from_str(*arg, span, LitStr::new("", span))?;
+                parse_value_from_str(*arg, span, "")?;
                 self.errors.add_info(span, &inf.help);
             }
         }
@@ -235,8 +237,29 @@ fn is_eoa(input: ParseStream) -> bool {
     input.peek(Token![,]) || input.is_empty()
 }
 
-fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, input: LitStr) -> syn::Result<()> {
+fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, input: &str) -> syn::Result<()> {
+    parse_value_from_literal(a, span, LitStr::new(input, span))
+}
+
+fn parse_value_from_literal(a: &mut dyn AnyArg, span: Span, input: LitStr) -> syn::Result<()> {
     input.parse_with(|input: ParseStream| a.parse_value(span, input))
+}
+
+pub trait ArgParse: 'static + Sized {
+    type Parser: Default;
+
+    fn parse_value(parser: &mut Self::Parser, input: ParseStream) -> syn::Result<Self>;
+}
+
+#[derive(Debug, Default)]
+pub struct SynParser;
+
+impl<T: 'static + syn::parse::Parse> ArgParse for T {
+    type Parser = SynParser;
+
+    fn parse_value(_: &mut Self::Parser, input: ParseStream) -> syn::Result<Self> {
+        input.parse()
+    }
 }
 
 /// A type earsed and object safe [`Arg<T>`].
@@ -250,7 +273,7 @@ pub(crate) trait AnyArg {
     fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
 }
 
-impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
+impl<T: ArgParse> AnyArg for Arg<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -264,7 +287,8 @@ impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
     }
 
     fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
-        self.add_value(span, input.parse()?);
+        let val = T::parse_value(&mut self.parser, input)?;
+        self.add_value(span, val);
         Ok(())
     }
 }

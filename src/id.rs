@@ -79,12 +79,14 @@ mod inner {
         }
     }
 
+    #[cfg_attr(docsrs, doc(cfg(feature = "string")))]
     impl From<String> for Id {
         fn from(s: String) -> Self {
             Self(Inner::Owned(s.into()))
         }
     }
 
+    #[cfg_attr(docsrs, doc(cfg(feature = "string")))]
     impl From<&'_ String> for Id {
         fn from(s: &'_ String) -> Self {
             Self(Inner::Owned(s.clone().into()))

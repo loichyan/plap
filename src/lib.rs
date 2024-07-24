@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[macro_use]
 mod macros;
 mod id;
@@ -9,7 +11,7 @@ mod validate;
 #[doc(inline)]
 pub use {
     id::Id,
-    parser::{Arg, Group, Parser},
+    parser::{Arg, ArgParse, Group, Parser, SynParser},
     schema::{ArgSchema, GroupSchema, Schema, SchemaFieldType},
 };
 
