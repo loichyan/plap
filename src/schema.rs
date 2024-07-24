@@ -3,9 +3,10 @@
 mod tests;
 
 use std::collections::BTreeMap;
+use std::ops;
 
 use crate::id::Id;
-use crate::parser2::*;
+use crate::parser::*;
 use crate::util::FmtWith;
 
 pub(crate) type Idx = usize;
@@ -264,7 +265,7 @@ impl IdMap {
     }
 }
 
-impl std::ops::Index<Idx> for IdMap {
+impl ops::Index<Idx> for IdMap {
     type Output = Info;
 
     fn index(&self, i: Idx) -> &Self::Output {
@@ -272,7 +273,7 @@ impl std::ops::Index<Idx> for IdMap {
     }
 }
 
-impl std::ops::IndexMut<Idx> for IdMap {
+impl ops::IndexMut<Idx> for IdMap {
     fn index_mut(&mut self, i: Idx) -> &mut Self::Output {
         &mut self.infos[i]
     }

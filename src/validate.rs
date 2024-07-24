@@ -1,5 +1,5 @@
 use crate::id::Id;
-use crate::parser2::*;
+use crate::parser::*;
 use crate::schema::*;
 use crate::util::{Captures, Errors, FmtWith};
 

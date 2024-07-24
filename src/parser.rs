@@ -1,194 +1,262 @@
-use proc_macro2::{Span, TokenTree};
+use std::any::Any;
+
+use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
-use syn::{Ident, Result, Token};
+use syn::{parenthesized, LitStr, Token};
 
-use crate::arg::ArgGroup;
-use crate::runtime::Rt;
-use crate::{Arg, DefaultFormatter, ErrorFormatter, Name};
+use crate::id::Id;
+use crate::schema::*;
 
-/// Parse input stream into user-defined container.
-pub trait Parser: Sized {
-    type Output;
+#[derive(Debug)]
+pub struct Arg<T> {
+    i: Idx,
+    spans: Vec<Span>,
+    values: Vec<T>,
+}
 
-    /// Constructs a parser from the pre-configured context.
-    fn from_context(context: ParserContext) -> Self;
+impl<T> Arg<T> {
+    pub fn schema() -> ArgSchema {
+        ArgSchema::default()
+    }
 
-    /// Returns the context of current parser.
-    fn context(&self) -> &ParserContext;
+    pub(crate) fn new(i: Idx) -> Self {
+        Self {
+            i,
+            spans: <_>::default(),
+            values: <_>::default(),
+        }
+    }
 
-    /// Returns the mutable context of current parser.
-    fn context_mut(&mut self) -> &mut ParserContext;
+    pub fn add_value(&mut self, span: Span, value: T) {
+        self.spans.push(span);
+        self.values.push(value);
+    }
+}
 
-    /// Attempts to parse an encountered argument and returns `false` if the
-    /// input stream cannot be parsed.
-    fn parse_once(&mut self, input: ParseStream) -> Result<bool>;
+#[derive(Debug)]
+pub struct ArgGroup {
+    i: Idx,
+}
 
-    /// Parses the input stream as comma-separated arguments.
-    fn parse(&mut self, input: ParseStream) -> Result<()> {
+impl ArgGroup {
+    pub fn schema() -> ArgGroupSchema {
+        ArgGroupSchema::default()
+    }
+
+    pub(crate) fn new(i: Idx) -> Self {
+        Self { i }
+    }
+}
+
+pub struct Parser<'a> {
+    pub(crate) schema: &'a Schema,
+    pub(crate) values: Vec<Value<'a>>,
+    pub(crate) errors: crate::util::Errors,
+}
+
+pub(crate) struct Value<'a> {
+    pub state: ValueState,
+    pub kind: ValueKind<'a>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum ValueState {
+    None,
+    Busy,
+    Empty,
+    Provided,
+    ProvidedMany,
+}
+
+pub(crate) enum ValueKind<'a> {
+    None,
+    Arg(&'a mut dyn AnyArg, &'a ArgInfo),
+    Group(&'a mut ArgGroup, &'a GroupInfo),
+}
+
+impl<'a> Parser<'a> {
+    pub fn new(schema: &'a Schema) -> Self {
+        if is_debug!() {
+            schema.ensure_all_registered();
+        }
+        Self {
+            schema,
+            values: std::iter::repeat_with(|| Value {
+                state: ValueState::None,
+                kind: ValueKind::None,
+            })
+            .take(schema.i.len())
+            .collect(),
+            errors: <_>::default(),
+        }
+    }
+
+    fn add(&mut self, i: Idx, value: ValueKind<'a>) {
+        let val = &mut self.values[i];
+        match val.kind {
+            ValueKind::None => val.kind = value,
+            ValueKind::Arg(..) => panic!("`{}` has been added as an argument", self.schema.i[i].id),
+            ValueKind::Group(..) => panic!("`{}` has been added as a group", self.schema.i[i].id),
+        }
+    }
+
+    pub fn add_arg<T>(&mut self, arg: &'a mut Arg<T>) -> &mut Self
+    where
+        T: 'static + syn::parse::Parse,
+    {
+        let i = arg.i;
+        self.add(i, ValueKind::Arg(arg, self.schema.ensure_arg(i)));
+        self
+    }
+
+    pub fn add_group(&mut self, group: &'a mut ArgGroup) -> &mut Self {
+        let i = group.i;
+        self.add(i, ValueKind::Group(group, self.schema.ensure_group(i)));
+        self
+    }
+
+    pub fn with_span(&mut self, span: Span) -> &mut Self {
+        self.errors.set_span(span);
+        self
+    }
+
+    pub fn get_arg<T: 'static>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
+        self._get_arg(id.into())
+    }
+
+    fn _get_arg<T: 'static>(&self, id: Id) -> Option<&Arg<T>> {
+        self.schema.i.get(&id).and_then(|i| {
+            if let ValueKind::Arg(arg, _) = &self.values[i].kind {
+                arg.as_any().downcast_ref()
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn get_arg_mut<T: 'static>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
+        self._get_arg_mut(id.into())
+    }
+
+    fn _get_arg_mut<T: 'static>(&mut self, id: Id) -> Option<&mut Arg<T>> {
+        self.schema.i.get(&id).and_then(|i| {
+            if let ValueKind::Arg(arg, _) = &mut self.values[i].kind {
+                arg.as_any_mut().downcast_mut()
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn parse(&mut self, tokens: ParseStream) -> syn::Result<()> {
         loop {
-            if input.is_empty() {
+            if tokens.is_empty() {
                 break;
             }
 
-            // Report unknown arguments.
-            let span = input.span();
-            match self.parse_once(input) {
-                Ok(false) => {
-                    let context = self.context_mut();
-                    let msg = if input.peek(Ident) {
-                        // Attempt to parse as an unknown argument
-                        let name = input.parse::<Ident>()?;
-                        context.format(&crate::Error::UnknownArg {
-                            this: &name.to_string(),
-                        })
-                    } else {
-                        // Invalid input
-                        context.format(&crate::Error::InvalidInput)
-                    };
-                    context.error(syn::Error::new(span, msg));
-                }
-                // Report the error and eat all rest tokens
-                Err(e) => self.context_mut().error(e),
-                Ok(true) if input.is_empty() => break,
-                // No errors,
-                Ok(true) => match input.parse::<Token![,]>() {
-                    Ok(_) => continue,
-                    // expect a comma
-                    Err(e) => self.context_mut().error(e),
-                },
+            if let Err(e) = self.parse_next(tokens) {
+                self.errors.add(e);
             }
 
-            // Eat all tokens util a comma.
-            loop {
-                if input.is_empty() || input.parse::<Option<Token![,]>>()?.is_some() {
-                    break;
-                } else {
-                    input.parse::<TokenTree>()?;
-                }
+            // consume all tokens till the next comma
+            while tokens.parse::<Option<Token![,]>>()?.is_none() && !tokens.is_empty() {
+                tokens.parse::<proc_macro2::TokenTree>()?;
             }
         }
         Ok(())
     }
 
-    /// Completes parsing, validates results and returns errors that occurred
-    /// during parsing/validating.
-    ///
-    /// **Note:** This function should combine all encountered validation errors
-    /// into a single error.
-    fn finish(self) -> Result<Self::Output>;
-}
+    fn parse_next(&mut self, tokens: ParseStream) -> syn::Result<()> {
+        let span = tokens.span();
+        let ident = tokens.parse::<Ident>()?.to_string();
 
-/// The runtime context for a [`Parser`].
-pub struct ParserContext {
-    node: Span,
-    formatter: Box<dyn ErrorFormatter>,
-    rt: Rt,
-}
+        let (arg, inf) = self
+            .schema
+            .i
+            .get(&ident)
+            .and_then(|i| {
+                if let ValueKind::Arg(arg, inf) = &mut self.values[i].kind {
+                    Some((arg, inf))
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| syn_error!(span, "unknown argument"))?;
 
-impl ParserContext {
-    pub fn new(node: Span) -> Self {
-        Self::builder().node(node).build()
+        match inf.typ {
+            ArgType::Expr | ArgType::Flag => {
+                if tokens.parse::<Option<Token![=]>>()?.is_some() {
+                    arg.parse_value(span, tokens)?;
+                } else if tokens.peek(syn::token::Paren) {
+                    let content;
+                    parenthesized!(content in tokens);
+                    arg.parse_value(span, &content)?;
+                } else if inf.typ == ArgType::Flag && is_eoa(tokens) {
+                    parse_value_from_str(*arg, span, LitStr::new("true", span))?;
+                } else {
+                    return Err(syn_error!(span, "expected `= <value>` or `(<value>)`"));
+                }
+            }
+            ArgType::TokenTree => {
+                if tokens.parse::<Option<Token![=]>>()?.is_some() {
+                    let content = tokens.parse::<syn::LitStr>()?;
+                    parse_value_from_str(*arg, span, content)?;
+                } else if tokens.peek(syn::token::Paren) {
+                    let content;
+                    parenthesized!(content in tokens);
+                    arg.parse_value(span, &content)?;
+                } else {
+                    return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
+                }
+            }
+            ArgType::Help => {
+                parse_value_from_str(*arg, span, LitStr::new("", span))?;
+                self.errors.add_info(span, &inf.help);
+            }
+        }
+
+        Ok(())
     }
 
-    /// Overrides the default contexts.
-    pub fn builder() -> ParserContextBuilder {
-        ParserContextBuilder::default()
-    }
-
-    /// Returns the current [`node`].
-    ///
-    /// [`node`]: ParserContextBuilder::node
-    pub fn node(&self) -> Span {
-        self.node
-    }
-
-    /// Displays an [`Error`] using configured [`formatter`].
-    ///
-    /// [`Error`]: crate::Error
-    /// [`formatter`]: ParserContextBuilder::formatter
-    pub fn format(&self, err: &crate::Error) -> String {
-        self.formatter.fmt(err)
-    }
-
-    /// Registers an argument.
-    pub fn arg<T>(&mut self, name: Name) -> Arg<T> {
-        let id = self.rt.borrow_mut().register(name);
-        Arg::new(id, self.rt.clone())
-    }
-
-    /// Registers a group.
-    pub fn group(&mut self, name: Name) -> ArgGroup {
-        let id = self.rt.borrow_mut().register(name);
-        ArgGroup::new(id, self.rt.clone())
-    }
-
-    /// Saves an error which will be reported in [`finish`].
-    ///
-    /// [`finish`]: Self::finish
-    pub fn error(&mut self, e: syn::Error) {
-        self.rt.borrow_mut().add_error(e);
-    }
-
-    /// Completes parsing and validates arguments.
-    ///
-    /// **Note:** This function should be called before accessing the value(s)
-    /// of an [`Arg`] in [`Parser::finish`] to ensure all arguments are valid.
-    pub fn finish(self) -> Result<()> {
-        self.rt.take().finish(self)
+    pub fn finish(self) -> syn::Result<()> {
+        crate::validate::validate(self)
     }
 }
 
-/// Builder for [`ParserContext`].
-#[derive(Default)]
-pub struct ParserContextBuilder {
-    node: Option<Span>,
-    namespace: Option<Name>,
-    formatter: Option<Box<dyn ErrorFormatter>>,
+fn is_eoa(tokens: ParseStream) -> bool {
+    tokens.peek(Token![,]) || tokens.is_empty()
 }
 
-impl ParserContextBuilder {
-    /// Sets the node to which arguments belong.
-    pub fn node(self, node: Span) -> Self {
-        Self {
-            node: Some(node),
-            ..self
-        }
+fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, tokens: LitStr) -> syn::Result<()> {
+    tokens.parse_with(|tokens: ParseStream| a.parse_value(span, tokens))
+}
+
+/// A type earsed and object safe [`Arg<T>`].
+pub(crate) trait AnyArg {
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn spans(&self) -> &[Span];
+
+    fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()>;
+}
+
+impl<T: 'static + syn::parse::Parse> AnyArg for Arg<T> {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
-    /// Defines the namespace of [`DefaultFormatter`] for arguments and formats
-    /// each argument as `namespace.argument`.
-    pub fn namespace(self, namespace: Name) -> Self {
-        Self {
-            namespace: Some(namespace),
-            ..self
-        }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 
-    /// Sets the error formatter. The default is [`DefaultFormatter`].
-    pub fn formatter(self, formatter: impl 'static + ErrorFormatter) -> Self {
-        Self {
-            formatter: Some(Box::new(formatter)),
-            ..self
-        }
+    fn spans(&self) -> &[Span] {
+        &self.spans
     }
 
-    /// Consumes the builder and constructs [`ParserContext`].
-    ///
-    /// # Panics
-    ///
-    /// Panics if [`node`] is not supplied.
-    ///
-    /// [`node`]: Self::node
-    pub fn build(self) -> ParserContext {
-        let Self {
-            node,
-            namespace,
-            formatter,
-        } = self;
-        ParserContext {
-            node: node.expect("`ParserContext::node` is required"),
-            formatter: formatter.unwrap_or_else(|| Box::new(DefaultFormatter { namespace })),
-            rt: <_>::default(),
-        }
+    fn parse_value(&mut self, span: Span, tokens: ParseStream) -> syn::Result<()> {
+        self.add_value(span, tokens.parse()?);
+        Ok(())
     }
 }
