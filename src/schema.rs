@@ -3,7 +3,7 @@
 mod tests;
 
 use std::collections::BTreeMap;
-use std::ops;
+use std::{fmt, ops};
 
 use crate::id::Id;
 use crate::parser::*;
@@ -20,6 +20,62 @@ pub struct Schema {
     pub(crate) required: Vec<Idx>,
     pub(crate) requirements: Vec<(Idx, Vec<Idx>)>,
     pub(crate) conflicts: Vec<(Idx, Vec<Idx>)>,
+}
+
+impl fmt::Debug for Schema {
+    fn fmt<'a>(&'a self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let fmt_list = |list: &'a [Idx]| {
+            FmtWith(|f| {
+                f.debug_list()
+                    .entries(list.iter().copied().map(self.i.by_id()))
+                    .finish()
+            })
+        };
+        let fmt_map = |map: &'a [(Idx, Vec<Idx>)]| {
+            FmtWith(|f| {
+                f.debug_map()
+                    .entries(map.iter().map(|&(i, ref v)| (self.i.id(i), fmt_list(v))))
+                    .finish()
+            })
+        };
+        let fmt_arg = |a: &'a ArgInfo| {
+            FmtWith(|f| {
+                f.debug_struct("Arg")
+                    .field("kind", &a.kind)
+                    .field("help", &a.help)
+                    .finish()
+            })
+        };
+        let fmt_group = |g: &'a GroupInfo| {
+            FmtWith(|f| {
+                f.debug_struct("Group")
+                    .field("members", &fmt_list(&g.members))
+                    .finish()
+            })
+        };
+        let fmt_info = |i: &'a Info| {
+            FmtWith(|f| match &i.kind {
+                InfoKind::None => f.write_str("None"),
+                InfoKind::Arg(a) => fmt_arg(a).fmt(f),
+                InfoKind::Group(g) => fmt_group(g).fmt(f),
+            })
+        };
+        let fmt_imap = |i: &'a IdMap| {
+            FmtWith(|f| {
+                f.debug_map()
+                    .entries(i.infos.iter().map(|i| (&i.id, fmt_info(i))))
+                    .finish()
+            })
+        };
+
+        f.debug_struct("Schema")
+            .field("i", &fmt_imap(&self.i))
+            .field("exclusives", &fmt_list(&self.exclusives))
+            .field("required", &fmt_list(&self.required))
+            .field("requirements", &fmt_map(&self.requirements))
+            .field("conflicts", &fmt_map(&self.conflicts))
+            .finish()
+    }
 }
 
 impl Schema {
@@ -166,32 +222,6 @@ impl Schema {
     }
 }
 
-impl std::fmt::Debug for Schema {
-    fn fmt<'a>(&'a self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let fmt_list = |list: &'a [Idx]| {
-            FmtWith(|f| {
-                f.debug_list()
-                    .entries(list.iter().copied().map(self.i.by_id()))
-                    .finish()
-            })
-        };
-        let fmt_map = |map: &'a [(Idx, Vec<Idx>)]| {
-            FmtWith(|f| {
-                f.debug_map()
-                    .entries(map.iter().map(|&(i, ref v)| (self.i.id(i), fmt_list(v))))
-                    .finish()
-            })
-        };
-
-        f.debug_struct("Schema")
-            .field("exclusives", &fmt_list(&self.exclusives))
-            .field("required", &fmt_list(&self.required))
-            .field("requirements", &fmt_map(&self.requirements))
-            .field("conflicts", &fmt_map(&self.conflicts))
-            .finish()
-    }
-}
-
 #[derive(Debug, Default)]
 pub(crate) struct IdMap {
     ids: BTreeMap<Id, Idx>,
@@ -236,7 +266,7 @@ impl IdMap {
         if let Some(&i) = self.ids.get(&id) {
             return i;
         }
-        let i = self.ids.len();
+        let i = self.infos.len();
         self.ids.insert(id.clone(), i);
         self.infos.push(Info {
             id,

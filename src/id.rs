@@ -6,6 +6,18 @@ use std::ops::Deref;
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(Str);
 
+impl fmt::Debug for Id {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
+
 impl Id {
     pub fn as_str(&self) -> &str {
         &self.0
@@ -14,6 +26,12 @@ impl Id {
 
 impl AsRef<str> for Id {
     fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::borrow::Borrow<str> for Id {
+    fn borrow(&self) -> &str {
         self.as_str()
     }
 }
@@ -46,26 +64,20 @@ impl From<&'_ String> for Id {
     }
 }
 
-impl std::borrow::Borrow<str> for Id {
-    fn borrow(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl fmt::Debug for Id {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_str().fmt(f)
-    }
-}
-
-impl fmt::Display for Id {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_str().fmt(f)
-    }
-}
-
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Str(inner::Inner);
+
+impl fmt::Debug for Str {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.deref().fmt(f)
+    }
+}
+
+impl fmt::Display for Str {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.deref().fmt(f)
+    }
+}
 
 impl Deref for Str {
     type Target = str;
@@ -78,18 +90,6 @@ impl Deref for Str {
 impl std::borrow::Borrow<str> for Str {
     fn borrow(&self) -> &str {
         self.deref()
-    }
-}
-
-impl fmt::Debug for Str {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.deref().fmt(f)
-    }
-}
-
-impl fmt::Display for Str {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.deref().fmt(f)
     }
 }
 

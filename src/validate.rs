@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::id::Id;
 use crate::parser::*;
 use crate::schema::*;
@@ -103,8 +105,8 @@ impl<'a, 'b> Checker<'a, 'b> {
         self.schema.id(i)
     }
 
-    fn name(&self, i: Idx) -> impl '_ + std::fmt::Display + Captures<'a> + Captures<'b> {
-        use std::fmt::Display;
+    fn name(&self, i: Idx) -> impl '_ + fmt::Display + Captures<'a> + Captures<'b> {
+        use fmt::Display;
 
         FmtWith(move |f| {
             match self.value(i).kind {
@@ -131,7 +133,7 @@ impl<'a, 'b> Checker<'a, 'b> {
 
     fn emit_errors<S>(&self, errors: &mut Errors, i: Idx, mut e: impl FnMut() -> S)
     where
-        S: std::fmt::Display,
+        S: fmt::Display,
     {
         self.visit(i, |_, arg| {
             for &span in arg.spans() {
