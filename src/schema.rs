@@ -33,7 +33,7 @@ impl Schema {
 
     fn _register_arg(&mut self, id: Id, schema: ArgSchema) -> &mut Self {
         let ArgSchema {
-            typ,
+            kind,
             help,
             multiple,
             required,
@@ -43,7 +43,7 @@ impl Schema {
 
         let i = self.i.of(id);
         let arg = ArgInfo {
-            typ,
+            kind,
             help: help.into(),
         };
         self.i.register(i, InfoKind::Arg(arg));
@@ -209,7 +209,7 @@ pub(crate) enum InfoKind {
 
 #[derive(Debug)]
 pub(crate) struct ArgInfo {
-    pub typ: ArgType,
+    pub kind: ArgKind,
     pub help: Box<str>,
 }
 
@@ -285,7 +285,7 @@ impl ops::IndexMut<Idx> for IdMap {
 
 #[derive(Debug, Default)]
 pub struct ArgSchema {
-    typ: ArgType,
+    kind: ArgKind,
     help: String,
     multiple: bool,
     required: bool,
@@ -294,39 +294,39 @@ pub struct ArgSchema {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ArgType {
+pub enum ArgKind {
     Expr,
     Flag,
     TokenTree,
     Help,
 }
 
-impl Default for ArgType {
+impl Default for ArgKind {
     fn default() -> Self {
-        ArgType::TokenTree
+        ArgKind::TokenTree
     }
 }
 
 impl ArgSchema {
-    pub fn typ(&mut self, typ: ArgType) -> &mut Self {
-        self.typ = typ;
+    pub fn kind(&mut self, kind: ArgKind) -> &mut Self {
+        self.kind = kind;
         self
     }
 
     pub fn is_expr(&mut self) -> &mut Self {
-        self.typ(ArgType::Expr)
+        self.kind(ArgKind::Expr)
     }
 
     pub fn is_flag(&mut self) -> &mut Self {
-        self.typ(ArgType::Flag)
+        self.kind(ArgKind::Flag)
     }
 
     pub fn is_token_tree(&mut self) -> &mut Self {
-        self.typ(ArgType::TokenTree)
+        self.kind(ArgKind::TokenTree)
     }
 
     pub fn is_help(&mut self) -> &mut Self {
-        self.typ(ArgType::Help)
+        self.kind(ArgKind::Help)
     }
 
     pub fn help(&mut self, help: impl AsRef<str>) -> &mut Self {

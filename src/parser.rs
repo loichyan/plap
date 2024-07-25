@@ -193,21 +193,21 @@ impl<'a> Parser<'a> {
             })
             .ok_or_else(|| syn_error!(span, "unknown argument"))?;
 
-        match inf.typ {
-            ArgType::Expr | ArgType::Flag => {
+        match inf.kind {
+            ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     arg.parse_value(span, input)?;
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
                     arg.parse_value(span, &content)?;
-                } else if inf.typ == ArgType::Flag && is_eoa(input) {
+                } else if inf.kind == ArgKind::Flag && is_eoa(input) {
                     parse_value_from_str(*arg, span, "true")?;
                 } else {
                     return Err(syn_error!(span, "expected `= <value>` or `(<value>)`"));
                 }
             }
-            ArgType::TokenTree => {
+            ArgKind::TokenTree => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     let content = input.parse::<syn::LitStr>()?;
                     parse_value_from_literal(*arg, span, content)?;
@@ -219,7 +219,7 @@ impl<'a> Parser<'a> {
                     return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
                 }
             }
-            ArgType::Help => {
+            ArgKind::Help => {
                 parse_value_from_str(*arg, span, "")?;
                 self.errors.add_info(span, &inf.help);
             }
