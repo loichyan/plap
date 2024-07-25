@@ -114,6 +114,7 @@ impl Schema {
         self.i.get(id)
     }
 
+    // TODO: rename ensure_* to require_*
     pub(crate) fn ensure(&self, id: &Id) -> Idx {
         self.i(id)
             .unwrap_or_else(|| panic!("`{}` is not registered", id))

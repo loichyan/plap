@@ -21,8 +21,8 @@ macro_rules! define_args {
             $f_vis $f_name : $f_ty,
         )*}
 
+        #[allow(unused_mut)]
         impl $crate::private::Args for $name {
-            #[allow(unused_mut)]
             fn schema() -> $crate::private::Schema {
                 let mut schema = $crate::private::Schema::default();
                 $($crate::private::schema::register_to::<$f_ty>(
@@ -47,7 +47,6 @@ macro_rules! define_args {
                 }
             }
 
-            #[allow(unused_mut)]
             fn init_parser<'a>(
                 schema: &'a $crate::private::Schema,
                 args: &'a mut Self,
