@@ -6,14 +6,15 @@ pub(crate) trait Captures<'__> {}
 
 impl<T: ?Sized> Captures<'_> for T {}
 
+#[derive(Debug, Default)]
 pub(crate) struct Errors {
     e: Option<syn::Error>,
-    span: Span,
+    spans: Vec<Span>,
 }
 
 impl Errors {
-    pub fn set_span(&mut self, span: Span) {
-        self.span = span;
+    pub fn add_span(&mut self, span: Span) {
+        self.spans.push(span);
     }
 
     pub fn add_info(&mut self, span: Span, msg: impl fmt::Display) {
@@ -21,16 +22,18 @@ impl Errors {
         self.add(syn_error!(span, msg));
     }
 
-    pub fn add_msg(&mut self, msg: impl fmt::Display) {
-        self.add(syn::Error::new(self.span, msg))
+    pub fn add_msg(&mut self, msg: impl fmt::Display + Clone) {
+        if self.spans.is_empty() {
+            self.add(syn::Error::new(Span::call_site(), msg));
+        } else {
+            for &span in self.spans.iter() {
+                add_err(&mut self.e, syn::Error::new(span, msg.clone()));
+            }
+        }
     }
 
     pub fn add(&mut self, e: syn::Error) {
-        if let Some(err) = self.e.as_mut() {
-            err.combine(e);
-        } else {
-            self.e = Some(e);
-        }
+        add_err(&mut self.e, e);
     }
 
     pub fn fail(&mut self) -> syn::Result<()> {
@@ -39,14 +42,18 @@ impl Errors {
             None => Ok(()),
         }
     }
+
+    pub fn reset(&mut self) {
+        self.e.take();
+        self.spans.clear();
+    }
 }
 
-impl Default for Errors {
-    fn default() -> Self {
-        Self {
-            e: <_>::default(),
-            span: Span::call_site(),
-        }
+fn add_err(target: &mut Option<syn::Error>, e: syn::Error) {
+    if let Some(target) = target {
+        target.combine(e);
+    } else {
+        *target = Some(e);
     }
 }
 

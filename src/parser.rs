@@ -119,8 +119,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn with_span(&mut self, span: Span) -> &mut Self {
-        self.errors.set_span(span);
+    pub fn add_span(&mut self, span: Span) -> &mut Self {
+        self.errors.add_span(span);
         self
     }
 
@@ -286,6 +286,8 @@ impl<'a> Parser<'a> {
                 ValueKind::Group(g, _) => g.reset(),
             }
         }
+        self.unacceptables.clear();
+        self.errors.reset();
     }
 }
 
