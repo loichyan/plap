@@ -55,13 +55,13 @@ macro_rules! define_args {
 
             #[allow(unused_mut)]
             fn init_parser<'a>(
-                &'a mut self,
                 schema: &'a $crate::private::Schema,
+                args: &'a mut Self,
             ) -> $crate::private::Parser<'a> {
                 let mut parser = $crate::private::Parser::new(schema);
                 $($crate::private::schema::add_to_parser::<$f_ty>(
                     &mut parser,
-                    &mut self.$f_name,
+                    &mut args.$f_name,
                 );)*
                 parser
             }

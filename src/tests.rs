@@ -37,7 +37,7 @@ fn test_parse() {
         |input: syn::parse::ParseStream| -> syn::Result<()> {
             let schema = MyArgs::schema();
             let mut my_args = MyArgs::init(&schema);
-            let mut parser = my_args.init_parser(&schema);
+            let mut parser = MyArgs::init_parser(&schema, &mut my_args);
             parser.parse(input)?;
             parser.finish()?;
             panic!("{:#?}\n{:#?}", schema, my_args);

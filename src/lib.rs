@@ -12,7 +12,7 @@ mod validate;
 pub use {
     id::Id,
     parser::{Arg, ArgParse, Group, Parser, SynParser},
-    schema::{ArgSchema, GroupSchema, Schema, SchemaFieldType},
+    schema::{ArgKind, ArgSchema, GroupSchema, Schema, SchemaFieldType},
 };
 
 pub trait Args: Sized {
@@ -20,12 +20,12 @@ pub trait Args: Sized {
 
     fn init(schema: &Schema) -> Self;
 
-    fn init_parser<'a>(&'a mut self, schema: &'a Schema) -> Parser<'a>;
+    fn init_parser<'a>(schema: &'a Schema, args: &'a mut Self) -> Parser<'a>;
 
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let schema = Self::schema();
         let mut args = Self::init(&schema);
-        let mut parser = args.init_parser(&schema);
+        let mut parser = Self::init_parser(&schema, &mut args);
         parser.parse(input)?;
         parser.finish()?;
         Ok(args)
