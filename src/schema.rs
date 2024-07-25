@@ -5,7 +5,8 @@ mod tests;
 use std::collections::BTreeMap;
 use std::{fmt, ops};
 
-use crate::id::Id;
+use crate::arg::*;
+use crate::id::*;
 use crate::parser::*;
 use crate::util::FmtWith;
 

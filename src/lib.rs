@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod macros;
+mod arg;
 mod id;
 mod parser;
 mod schema;
@@ -10,8 +11,9 @@ mod validate;
 
 #[doc(inline)]
 pub use {
+    arg::{Arg, Group},
     id::{Id, Str},
-    parser::{Arg, ArgParse, Group, Parser, SynParser},
+    parser::{ArgParse, Parser, SynParser},
     schema::{ArgKind, ArgSchema, GroupSchema, Schema, SchemaFieldType},
 };
 
