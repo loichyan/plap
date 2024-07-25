@@ -119,15 +119,6 @@ impl Schema {
             .unwrap_or_else(|| panic!("`{}` is not registered", id))
     }
 
-    pub(crate) fn ensure_all_registered(&self) {
-        assert_eq!(self.i.ids.len(), self.i.infos.len());
-        self.i.infos.iter().for_each(|inf| {
-            if matches!(inf.kind, InfoKind::None) {
-                panic!("`{}` is referred but not registered", inf.id);
-            }
-        })
-    }
-
     pub(crate) fn ensure_arg(&self, i: Idx) -> &ArgInfo {
         self.i.get_info(i).map_or_else(
             || panic!("argument does not exist"),

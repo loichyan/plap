@@ -4,7 +4,7 @@ use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
 use syn::{parenthesized, LitStr, Token};
 
-use crate::id::Id;
+use crate::id::*;
 use crate::schema::*;
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ impl Group {
 pub struct Parser<'a> {
     pub(crate) schema: &'a Schema,
     pub(crate) values: Vec<Value<'a>>,
-    pub(crate) unacceptables: Vec<Idx>,
+    pub(crate) unacceptables: Vec<(Idx, Str)>,
     pub(crate) errors: crate::util::Errors,
 }
 
@@ -88,9 +88,6 @@ pub(crate) enum ValueKind<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(schema: &'a Schema) -> Self {
-        if is_debug!() {
-            schema.ensure_all_registered();
-        }
         Self {
             schema,
             values: std::iter::repeat_with(|| Value {
@@ -134,11 +131,15 @@ impl<'a> Parser<'a> {
     }
 
     pub fn ensure_empty(&mut self, id: impl Into<Id>) -> &mut Self {
-        self._ensure_empty(id.into())
+        self._ensure_empty(id.into(), "not allowed".into())
     }
 
-    fn _ensure_empty(&mut self, id: Id) -> &mut Self {
-        self.unacceptables.push(self.schema.ensure(&id));
+    pub fn ensure_empty_with_msg(&mut self, id: impl Into<Id>, msg: impl Into<Str>) -> &mut Self {
+        self._ensure_empty(id.into(), msg.into())
+    }
+
+    fn _ensure_empty(&mut self, id: Id, msg: Str) -> &mut Self {
+        self.unacceptables.push((self.schema.ensure(&id), msg));
         self
     }
 

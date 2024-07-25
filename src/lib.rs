@@ -10,7 +10,7 @@ mod validate;
 
 #[doc(inline)]
 pub use {
-    id::Id,
+    id::{Id, Str},
     parser::{Arg, ArgParse, Group, Parser, SynParser},
     schema::{ArgKind, ArgSchema, GroupSchema, Schema, SchemaFieldType},
 };

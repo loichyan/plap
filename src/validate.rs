@@ -74,13 +74,8 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
     }
 
     // check: unacceptables
-    for i in parser
-        .unacceptables
-        .iter()
-        .copied()
-        .filter(|&i| c.provided(i))
-    {
-        c.emit_errors(errors, i, || "not allowed");
+    for &(i, ref msg) in parser.unacceptables.iter().filter(|&&(i, _)| c.provided(i)) {
+        c.emit_errors(errors, i, || msg);
     }
 
     parser.errors.fail()
