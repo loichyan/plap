@@ -114,13 +114,12 @@ impl Schema {
         self.i.get(id)
     }
 
-    // TODO: rename ensure_* to require_*
-    pub(crate) fn ensure(&self, id: &Id) -> Idx {
+    pub(crate) fn require(&self, id: &Id) -> Idx {
         self.i(id)
             .unwrap_or_else(|| panic!("`{}` is not registered", id))
     }
 
-    pub(crate) fn ensure_arg(&self, i: Idx) -> &ArgInfo {
+    pub(crate) fn require_arg(&self, i: Idx) -> &ArgInfo {
         self.i.get_info(i).map_or_else(
             || panic!("argument does not exist"),
             |inf| {
@@ -133,7 +132,7 @@ impl Schema {
         )
     }
 
-    pub(crate) fn ensure_group(&self, i: Idx) -> &GroupInfo {
+    pub(crate) fn require_group(&self, i: Idx) -> &GroupInfo {
         self.i.get_info(i).map_or_else(
             || panic!("group does not exist"),
             |inf| {
@@ -155,7 +154,7 @@ impl Schema {
     }
 
     fn _init_arg<T: ArgParse>(&self, id: Id, parser: T::Parser) -> Arg<T> {
-        Arg::new(self.ensure(&id), parser)
+        Arg::new(self.require(&id), parser)
     }
 
     pub fn init_group(&self, id: impl Into<Id>) -> Group {
@@ -163,7 +162,7 @@ impl Schema {
     }
 
     fn _init_group(&self, id: Id) -> Group {
-        Group::new(self.ensure(&id))
+        Group::new(self.require(&id))
     }
 }
 

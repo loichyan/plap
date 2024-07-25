@@ -120,26 +120,26 @@ impl<'a> Parser<'a> {
         T: 'static + syn::parse::Parse,
     {
         let i = arg.i;
-        self.add(i, ValueKind::Arg(arg, self.schema.ensure_arg(i)));
+        self.add(i, ValueKind::Arg(arg, self.schema.require_arg(i)));
         self
     }
 
     pub fn add_group(&mut self, group: &'a mut Group) -> &mut Self {
         let i = group.i;
-        self.add(i, ValueKind::Group(group, self.schema.ensure_group(i)));
+        self.add(i, ValueKind::Group(group, self.schema.require_group(i)));
         self
     }
 
-    pub fn ensure_empty(&mut self, id: impl Into<Id>) -> &mut Self {
-        self._ensure_empty(id.into(), "not allowed".into())
+    pub fn require_empty(&mut self, id: impl Into<Id>) -> &mut Self {
+        self._require_empty(id.into(), "not allowed".into())
     }
 
-    pub fn ensure_empty_with_msg(&mut self, id: impl Into<Id>, msg: impl Into<Str>) -> &mut Self {
-        self._ensure_empty(id.into(), msg.into())
+    pub fn require_empty_with_msg(&mut self, id: impl Into<Id>, msg: impl Into<Str>) -> &mut Self {
+        self._require_empty(id.into(), msg.into())
     }
 
-    fn _ensure_empty(&mut self, id: Id, msg: Str) -> &mut Self {
-        self.unacceptables.push((self.schema.ensure(&id), msg));
+    fn _require_empty(&mut self, id: Id, msg: Str) -> &mut Self {
+        self.unacceptables.push((self.schema.require(&id), msg));
         self
     }
 
