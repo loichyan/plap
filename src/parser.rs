@@ -145,6 +145,13 @@ impl<'a> Parser<'a> {
 
             if let Err(e) = self.parse_next(input) {
                 self.errors.add(e);
+            } else if input.parse::<Option<Token![,]>>()?.is_some() {
+                // successfully parse an argument
+                continue;
+            } else if !input.is_empty() {
+                self.errors.add(syn_error!(input.span(), "expected a `,`"));
+            } else {
+                break;
             }
 
             // consume all input till the next comma
@@ -156,12 +163,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_next(&mut self, input: ParseStream) -> syn::Result<()> {
-        let span = input.span();
-        let ident = input.parse::<Ident>()?.to_string();
+        let ident = input
+            .parse::<Option<Ident>>()?
+            .ok_or_else(|| syn_error!(input.span(), "expected an identifier"))?;
+        let span = ident.span();
 
         let (arg, inf) = self
             .schema
-            .i(ident)
+            .i(ident.to_string())
             .and_then(|i| {
                 if let ValueKind::Arg(ref mut arg, inf) = self.values[i].kind {
                     Some((arg, inf))
