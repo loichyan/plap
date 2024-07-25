@@ -83,27 +83,40 @@ impl Schema {
         requires: Vec<Id>,
         conflicts_with: Vec<Id>,
     ) {
-        debug_assert!(self.exclusives.iter().all(|t| *t != i));
+        debug_assert!(self.exclusives.iter().all(|&t| t != i));
         if !multiple {
             self.exclusives.push(i);
         }
 
-        debug_assert!(self.required.iter().all(|t| *t != i));
+        debug_assert!(self.required.iter().all(|&t| t != i));
         if required {
             self.required.push(i);
         }
 
-        debug_assert!(self.requirements.iter().all(|(t, _)| *t != i));
+        debug_assert!(self.requirements.iter().all(|&(t, _)| t != i));
         if !requires.is_empty() {
             self.requirements
                 .push((i, requires.into_iter().map(self.i.by_of()).collect()));
         }
 
-        debug_assert!(self.conflicts.iter().all(|(t, _)| *t != i));
+        debug_assert!(self.conflicts.iter().all(|&(t, _)| t != i));
         if !conflicts_with.is_empty() {
             self.conflicts
                 .push((i, conflicts_with.into_iter().map(self.i.by_of()).collect()));
         }
+    }
+
+    pub(crate) fn id(&self, i: Idx) -> &Id {
+        self.i.id(i)
+    }
+
+    pub(crate) fn i(&self, id: impl AsRef<str>) -> Option<Idx> {
+        self.i.get(id)
+    }
+
+    pub(crate) fn ensure(&self, id: &Id) -> Idx {
+        self.i(id)
+            .unwrap_or_else(|| panic!("`{}` is not registered", id))
     }
 
     pub(crate) fn ensure_all_registered(&self) {
@@ -119,7 +132,7 @@ impl Schema {
         self.i.get_info(i).map_or_else(
             || panic!("argument does not exist"),
             |inf| {
-                if let InfoKind::Arg(inf) = &inf.kind {
+                if let InfoKind::Arg(ref inf) = inf.kind {
                     inf
                 } else {
                     panic!("`{}` is not registered as an argument", inf.id);
@@ -132,7 +145,7 @@ impl Schema {
         self.i.get_info(i).map_or_else(
             || panic!("group does not exist"),
             |inf| {
-                if let InfoKind::Group(inf) = &inf.kind {
+                if let InfoKind::Group(ref inf) = inf.kind {
                     inf
                 } else {
                     panic!("`{}` is not registered as a group", inf.id);
@@ -150,7 +163,7 @@ impl Schema {
     }
 
     fn _init_arg<T: ArgParse>(&self, id: Id, parser: T::Parser) -> Arg<T> {
-        Arg::new(self.i.ensure(&id), parser)
+        Arg::new(self.ensure(&id), parser)
     }
 
     pub fn init_group(&self, id: impl Into<Id>) -> Group {
@@ -158,7 +171,7 @@ impl Schema {
     }
 
     fn _init_group(&self, id: Id) -> Group {
-        Group::new(self.i.ensure(&id))
+        Group::new(self.ensure(&id))
     }
 }
 
@@ -174,7 +187,7 @@ impl std::fmt::Debug for Schema {
         let fmt_map = |map: &'a [(Idx, Vec<Idx>)]| {
             FmtWith(|f| {
                 f.debug_map()
-                    .entries(map.iter().map(|(i, v)| (&self.i[*i].id, fmt_list(v))))
+                    .entries(map.iter().map(|&(i, ref v)| (self.i.id(i), fmt_list(v))))
                     .finish()
             })
         };
@@ -224,13 +237,13 @@ impl IdMap {
     }
 
     pub fn by_id<'a>(&'a self) -> impl '_ + Fn(Idx) -> &'a Id {
-        |i| &self[i].id
+        |i| self.id(i)
     }
 
     pub fn of(&mut self, id: Id) -> Idx {
         debug_assert_eq!(self.ids.len(), self.infos.len());
-        if let Some(i) = self.ids.get(&id) {
-            return *i;
+        if let Some(&i) = self.ids.get(&id) {
+            return i;
         }
         let i = self.ids.len();
         self.ids.insert(id.clone(), i);
@@ -255,13 +268,12 @@ impl IdMap {
         self.ids.len()
     }
 
-    pub fn get(&self, id: impl AsRef<str>) -> Option<Idx> {
-        self.ids.get(id.as_ref()).copied()
+    pub fn id(&self, i: Idx) -> &Id {
+        &self[i].id
     }
 
-    pub fn ensure(&self, id: &Id) -> Idx {
-        self.get(id)
-            .unwrap_or_else(|| panic!("`{}` is not registered", id))
+    pub fn get(&self, id: impl AsRef<str>) -> Option<Idx> {
+        self.ids.get(id.as_ref()).copied()
     }
 
     pub fn get_info(&self, i: Idx) -> Option<&Info> {

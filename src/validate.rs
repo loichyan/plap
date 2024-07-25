@@ -21,7 +21,7 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
         .exclusives
         .iter()
         .copied()
-        .filter(|i| c.provided_many(*i))
+        .filter(|&i| c.provided_many(i))
     {
         match &c.value(i).kind {
             ValueKind::Arg(..) => c.emit_errors(errors, i, || "value is duplicated"),
@@ -47,33 +47,48 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
         .required
         .iter()
         .copied()
-        .filter(|i| !c.provided(*i))
+        .filter(|&i| !c.provided(i))
     {
         errors.add_msg(format!("`{}` is required", c.name(i)));
     }
 
     // check: requirements
-    for &(i, ref requirements) in c.schema.requirements.iter().filter(|(i, _)| c.provided(*i)) {
-        for dest in requirements.iter().copied().filter(|i| !c.provided(*i)) {
+    for &(i, ref requirements) in c
+        .schema
+        .requirements
+        .iter()
+        .filter(|&&(i, _)| c.provided(i))
+    {
+        for dest in requirements.iter().copied().filter(|&i| !c.provided(i)) {
             c.emit_errors(errors, i, || format!("requires `{}`", c.name(dest)));
         }
     }
 
     // check: conflicts
-    for &(i, ref conflicts) in c.schema.conflicts.iter().filter(|(i, _)| c.provided(*i)) {
-        for dest in conflicts.iter().copied().filter(|i| c.provided(*i)) {
+    for &(i, ref conflicts) in c.schema.conflicts.iter().filter(|&&(i, _)| c.provided(i)) {
+        for dest in conflicts.iter().copied().filter(|&i| c.provided(i)) {
             // conflicts are always bidirectional
             c.emit_errors(errors, i, || format!("conflicts with `{}`", c.name(dest)));
             c.emit_errors(errors, dest, || format!("conflicts with `{}`", c.name(i)));
         }
     }
 
+    // check: unacceptables
+    for i in parser
+        .unacceptables
+        .iter()
+        .copied()
+        .filter(|&i| c.provided(i))
+    {
+        c.emit_errors(errors, i, || "not allowed");
+    }
+
     parser.errors.fail()
 }
 
-struct Checker<'a, 'b> {
-    schema: &'a Schema,
-    values: &'b mut [Value<'a>],
+pub(crate) struct Checker<'a, 'b> {
+    pub schema: &'a Schema,
+    pub values: &'b mut [Value<'a>],
 }
 
 impl<'a, 'b> Checker<'a, 'b> {
@@ -90,15 +105,14 @@ impl<'a, 'b> Checker<'a, 'b> {
     }
 
     fn id(&self, i: Idx) -> &Id {
-        &self.schema.i[i].id
+        self.schema.id(i)
     }
 
     fn name(&self, i: Idx) -> impl '_ + std::fmt::Display + Captures<'a> + Captures<'b> {
         use std::fmt::Display;
 
         FmtWith(move |f| {
-            let val = &self.value(i);
-            match &val.kind {
+            match self.value(i).kind {
                 // fast path for a single argument
                 ValueKind::Arg(..) => self.id(i).fmt(f),
                 ValueKind::Group(..) => {
@@ -152,8 +166,8 @@ impl<'a, 'b> Checker<'a, 'b> {
         i: Idx,
         f: &mut dyn FnMut(Idx, &dyn AnyArg) -> Result<(), E>,
     ) -> Result<(), E> {
-        match &self.values[i].kind {
-            ValueKind::Arg(a, _) => f(i, *a),
+        match self.values[i].kind {
+            ValueKind::Arg(ref a, _) => f(i, *a),
             ValueKind::Group(_, g) => {
                 for &member in g.members.iter() {
                     self._try_visit(member, f)?;
@@ -167,34 +181,41 @@ impl<'a, 'b> Checker<'a, 'b> {
     fn update_state(&mut self, prev: Idx, i: Idx) -> ValueState {
         let val = &mut self.values[i];
         match val.state {
-            ValueState::None => match &val.kind {
+            ValueState::None => match val.kind {
                 ValueKind::None => {
-                    panic!("`{}` is not added", self.schema.i[i].id);
+                    panic!("`{}` is not added", self.schema.id(i));
                 }
-                ValueKind::Arg(a, _) => {
+                ValueKind::Arg(ref a, _) => {
                     val.state = ValueState::from_n(a.spans().len());
                     val.state
                 }
                 ValueKind::Group(_, g) => {
                     val.state = ValueState::Busy;
-                    let state = ValueState::from_n({
-                        let mut n = 0;
-                        for &member in g.members.iter() {
-                            if self.update_state(i, member).provided() {
-                                n += 1;
-                                // continue check to detect circular reference
-                            }
+                    // g is copied, so that we can pass the borrow check
+                    let _ = val;
+                    let mut n = 0;
+                    for &member in g.members.iter() {
+                        if self.update_state(i, member).provided() {
+                            n += 1;
+                            // continue check to detect circular reference and
+                            // count all provided arguments
                         }
-                        n
-                    });
-                    self.values[i].state = state;
-                    state
+                    }
+                    let val = &mut self.values[i];
+                    if let ValueKind::Group(ref mut g, _) = val.kind {
+                        g.n = n;
+                        val.state = ValueState::from_n(n);
+                        val.state
+                    } else {
+                        unreachable!()
+                    }
                 }
             },
             ValueState::Busy => {
                 panic!(
                     "found circular groups: `{}` and `{}`",
-                    self.schema.i[i].id, self.schema.i[prev].id
+                    self.schema.id(i),
+                    self.schema.id(prev)
                 );
             }
             state => state,

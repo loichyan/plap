@@ -46,6 +46,7 @@ impl<T: ArgParse> Arg<T> {
 #[derive(Debug)]
 pub struct Group {
     i: Idx,
+    pub(crate) n: usize,
 }
 
 impl Group {
@@ -54,13 +55,14 @@ impl Group {
     }
 
     pub(crate) fn new(i: Idx) -> Self {
-        Self { i }
+        Self { i, n: 0 }
     }
 }
 
 pub struct Parser<'a> {
     pub(crate) schema: &'a Schema,
     pub(crate) values: Vec<Value<'a>>,
+    pub(crate) unacceptables: Vec<Idx>,
     pub(crate) errors: crate::util::Errors,
 }
 
@@ -97,16 +99,22 @@ impl<'a> Parser<'a> {
             })
             .take(schema.i.len())
             .collect(),
+            unacceptables: <_>::default(),
             errors: <_>::default(),
         }
+    }
+
+    pub fn with_span(&mut self, span: Span) -> &mut Self {
+        self.errors.set_span(span);
+        self
     }
 
     fn add(&mut self, i: Idx, value: ValueKind<'a>) {
         let val = &mut self.values[i];
         match val.kind {
             ValueKind::None => val.kind = value,
-            ValueKind::Arg(..) => panic!("`{}` has been added as an argument", self.schema.i[i].id),
-            ValueKind::Group(..) => panic!("`{}` has been added as a group", self.schema.i[i].id),
+            ValueKind::Arg(..) => panic!("`{}` has been added as an argument", self.schema.id(i)),
+            ValueKind::Group(..) => panic!("`{}` has been added as a group", self.schema.id(i)),
         }
     }
 
@@ -125,9 +133,17 @@ impl<'a> Parser<'a> {
         self
     }
 
-    pub fn with_span(&mut self, span: Span) -> &mut Self {
-        self.errors.set_span(span);
+    pub fn ensure_empty(&mut self, id: impl Into<Id>) -> &mut Self {
+        self._ensure_empty(id.into())
+    }
+
+    fn _ensure_empty(&mut self, id: Id) -> &mut Self {
+        self.unacceptables.push(self.schema.ensure(&id));
         self
+    }
+
+    pub fn has(&self, id: impl Into<Id>) -> bool {
+        self.schema.i(id.into()).is_some()
     }
 
     pub fn get_arg<T: ArgParse>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
@@ -135,8 +151,8 @@ impl<'a> Parser<'a> {
     }
 
     fn _get_arg<T: ArgParse>(&self, id: Id) -> Option<&Arg<T>> {
-        self.schema.i.get(&id).and_then(|i| {
-            if let ValueKind::Arg(arg, _) = &self.values[i].kind {
+        self.schema.i(id).and_then(|i| {
+            if let ValueKind::Arg(ref arg, _) = self.values[i].kind {
                 arg.as_any().downcast_ref()
             } else {
                 None
@@ -149,8 +165,8 @@ impl<'a> Parser<'a> {
     }
 
     fn _get_arg_mut<T: ArgParse>(&mut self, id: Id) -> Option<&mut Arg<T>> {
-        self.schema.i.get(&id).and_then(|i| {
-            if let ValueKind::Arg(arg, _) = &mut self.values[i].kind {
+        self.schema.i(id).and_then(|i| {
+            if let ValueKind::Arg(ref mut arg, _) = self.values[i].kind {
                 arg.as_any_mut().downcast_mut()
             } else {
                 None
@@ -182,10 +198,9 @@ impl<'a> Parser<'a> {
 
         let (arg, inf) = self
             .schema
-            .i
-            .get(&ident)
+            .i(ident)
             .and_then(|i| {
-                if let ValueKind::Arg(arg, inf) = &mut self.values[i].kind {
+                if let ValueKind::Arg(ref mut arg, inf) = self.values[i].kind {
                     Some((arg, inf))
                 } else {
                     None
