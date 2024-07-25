@@ -84,38 +84,38 @@ impl<T: ArgParse> Arg<T> {
 
 /// A type earsed and object safe [`Arg<T>`].
 pub(crate) trait AnyArg {
-    fn _as_any(&self) -> &dyn Any;
+    fn as_any(&self) -> &dyn Any;
 
-    fn _as_any_mut(&mut self) -> &mut dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn _spans(&self) -> &[Span];
+    fn spans(&self) -> &[Span];
 
-    fn _parser_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
+    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
 
-    fn _reset(&mut self);
+    fn reset(&mut self);
 }
 
 impl<T: ArgParse> AnyArg for Arg<T> {
-    fn _as_any(&self) -> &dyn Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn _as_any_mut(&mut self) -> &mut dyn Any {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
-    fn _spans(&self) -> &[Span] {
+    fn spans(&self) -> &[Span] {
         &self.spans
     }
 
-    fn _parser_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
+    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
         let val = T::parse_value(&mut self.parser, input)?;
         self.add_value(span, val);
         Ok(())
     }
 
-    fn _reset(&mut self) {
-        self.reset()
+    fn reset(&mut self) {
+        Arg::reset(self)
     }
 }
 

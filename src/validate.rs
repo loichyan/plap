@@ -32,7 +32,7 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
                 // each member conflicts with others
                 for (k, &i) in g.members.iter().enumerate() {
                     c.visit(i, |_, arg| {
-                        for &span in arg._spans() {
+                        for &span in arg.spans() {
                             for &j in g.members[0..k].iter().chain(g.members[(k + 1)..].iter()) {
                                 errors.add(syn_error!(span, "conflicts with `{}`", c.name(j)));
                             }
@@ -137,7 +137,7 @@ impl<'a, 'b> Checker<'a, 'b> {
         S: fmt::Display,
     {
         self.visit(i, |_, arg| {
-            for &span in arg._spans() {
+            for &span in arg.spans() {
                 errors.add(syn_error!(span, e()));
             }
         })
@@ -181,10 +181,10 @@ impl<'a, 'b> Checker<'a, 'b> {
         match val.state {
             ValueState::None => match val.kind {
                 ValueKind::None => {
-                    panic!("`{}` is not added", self.schema.id(i));
+                    panic!("`{}` is not added", self.id(i));
                 }
                 ValueKind::Arg(ref a, _) => {
-                    val.state = ValueState::from_n(a._spans().len());
+                    val.state = ValueState::from_n(a.spans().len());
                     val.state
                 }
                 ValueKind::Group(_, g) => {
@@ -212,8 +212,8 @@ impl<'a, 'b> Checker<'a, 'b> {
             ValueState::Busy => {
                 panic!(
                     "found circular groups: `{}` and `{}`",
-                    self.schema.id(i),
-                    self.schema.id(prev)
+                    self.id(i),
+                    self.id(prev)
                 );
             }
             state => state,

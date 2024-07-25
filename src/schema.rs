@@ -14,7 +14,7 @@ pub(crate) type Idx = usize;
 
 #[derive(Default)]
 pub struct Schema {
-    pub(crate) i: IdMap,
+    i: IdMap,
     /// The values of an exclusive argument are duplicated with each other. The
     /// members of an exclusive group conflict with each other.
     pub(crate) exclusives: Vec<Idx>,
@@ -163,12 +163,20 @@ impl Schema {
         }
     }
 
+    pub(crate) fn i(&self, id: impl AsRef<str>) -> Option<Idx> {
+        self.i.ids.get(id.as_ref()).copied()
+    }
+
     pub(crate) fn id(&self, i: Idx) -> &Id {
         self.i.id(i)
     }
 
-    pub(crate) fn i(&self, id: impl AsRef<str>) -> Option<Idx> {
-        self.i.get(id)
+    pub(crate) fn infos(&self) -> &[Info] {
+        &self.i.infos
+    }
+
+    pub(crate) fn info(&self, i: Idx) -> Option<&Info> {
+        self.i.infos.get(i)
     }
 
     pub(crate) fn require(&self, id: &Id) -> Idx {
@@ -177,7 +185,7 @@ impl Schema {
     }
 
     pub(crate) fn require_arg(&self, i: Idx) -> &ArgInfo {
-        self.i.get_info(i).map_or_else(
+        self.info(i).map_or_else(
             || panic!("argument does not exist"),
             |inf| {
                 if let InfoKind::Arg(inf) = &inf.kind {
@@ -190,7 +198,7 @@ impl Schema {
     }
 
     pub(crate) fn require_group(&self, i: Idx) -> &GroupInfo {
-        self.i.get_info(i).map_or_else(
+        self.info(i).map_or_else(
             || panic!("group does not exist"),
             |inf| {
                 if let InfoKind::Group(inf) = &inf.kind {
@@ -291,18 +299,6 @@ impl IdMap {
 
     pub fn id(&self, i: Idx) -> &Id {
         &self[i].id
-    }
-
-    pub fn get(&self, id: impl AsRef<str>) -> Option<Idx> {
-        self.ids.get(id.as_ref()).copied()
-    }
-
-    pub fn get_info(&self, i: Idx) -> Option<&Info> {
-        self.infos.get(i)
-    }
-
-    pub fn infos(&self) -> &[Info] {
-        &self.infos
     }
 }
 

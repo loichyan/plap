@@ -39,7 +39,6 @@ impl<'a> Parser<'a> {
         Self {
             schema,
             values: schema
-                .i
                 .infos()
                 .iter()
                 .map(|_| Value {
@@ -102,7 +101,7 @@ impl<'a> Parser<'a> {
     fn _get_arg<T: ArgParse>(&self, id: Id) -> Option<&Arg<T>> {
         self.schema.i(id).and_then(|i| {
             if let ValueKind::Arg(arg, _) = &self.values[i].kind {
-                arg._as_any().downcast_ref()
+                arg.as_any().downcast_ref()
             } else {
                 None
             }
@@ -116,7 +115,7 @@ impl<'a> Parser<'a> {
     fn _get_arg_mut<T: ArgParse>(&mut self, id: Id) -> Option<&mut Arg<T>> {
         self.schema.i(id).and_then(|i| {
             if let ValueKind::Arg(arg, _) = &mut self.values[i].kind {
-                arg._as_any_mut().downcast_mut()
+                arg.as_any_mut().downcast_mut()
             } else {
                 None
             }
@@ -183,11 +182,11 @@ impl<'a> Parser<'a> {
         match inf.kind {
             ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
-                    arg._parser_value(span, input)?;
+                    arg.parse_value(span, input)?;
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg._parser_value(span, &content)?;
+                    arg.parse_value(span, &content)?;
                 } else if inf.kind == ArgKind::Flag && is_eoa(input) {
                     parse_value_from_str(*arg, span, "true")?;
                 } else {
@@ -201,31 +200,50 @@ impl<'a> Parser<'a> {
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg._parser_value(span, &content)?;
+                    arg.parse_value(span, &content)?;
                 } else {
                     return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
                 }
             }
             ArgKind::Help => {
                 parse_value_from_str(*arg, span, "")?;
-                self.errors.add_info(span, &inf.help);
+                self.errors.add_info(span, self.build_help());
             }
         }
 
         Ok(())
     }
 
+    // TODO: show relations
+    fn build_help(&self) -> String {
+        let lines = self
+            .values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                if let ValueKind::Arg(_, inf) = &v.kind {
+                    format!("{}:\n    {}\n", self.schema.id(i), inf.help)
+                } else {
+                    String::new()
+                }
+            })
+            .collect::<Array<_>>();
+
+        std::iter::once("USAGE:\n")
+            .chain(lines.iter().map(String::as_str))
+            .collect()
+    }
+
     pub fn finish(&mut self) -> syn::Result<()> {
         crate::validate::validate(self)
     }
 
-    // TODO: do not expose `reset()`
     pub fn reset(&mut self) {
         for v in self.values.iter_mut() {
             v.state = ValueState::None;
             match &mut v.kind {
                 ValueKind::None => {}
-                ValueKind::Arg(a, _) => a._reset(),
+                ValueKind::Arg(a, _) => a.reset(),
                 ValueKind::Group(g, _) => g.reset(),
             }
         }
@@ -243,7 +261,7 @@ fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, input: &str) -> syn::Res
 }
 
 fn parse_value_from_literal(a: &mut dyn AnyArg, span: Span, input: LitStr) -> syn::Result<()> {
-    input.parse_with(|input: ParseStream| a._parser_value(span, input))
+    input.parse_with(|input: ParseStream| a.parse_value(span, input))
 }
 
 pub trait ArgParse: 'static + Sized {
