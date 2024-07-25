@@ -8,7 +8,7 @@ use std::{fmt, ops};
 use crate::arg::*;
 use crate::id::*;
 use crate::parser::*;
-use crate::util::FmtWith;
+use crate::util::{Array, FmtWith};
 
 pub(crate) type Idx = usize;
 
@@ -19,8 +19,8 @@ pub struct Schema {
     /// members of an exclusive group conflict with each other.
     pub(crate) exclusives: Vec<Idx>,
     pub(crate) required: Vec<Idx>,
-    pub(crate) requirements: Vec<(Idx, Vec<Idx>)>,
-    pub(crate) conflicts: Vec<(Idx, Vec<Idx>)>,
+    pub(crate) requirements: Vec<(Idx, Array<Idx>)>,
+    pub(crate) conflicts: Vec<(Idx, Array<Idx>)>,
 }
 
 impl fmt::Debug for Schema {
@@ -32,7 +32,7 @@ impl fmt::Debug for Schema {
                     .finish()
             })
         };
-        let fmt_map = |map: &'a [(Idx, Vec<Idx>)]| {
+        let fmt_map = |map: &'a [(Idx, Array<Idx>)]| {
             FmtWith(|f| {
                 f.debug_map()
                     .entries(map.iter().map(|(i, v)| (self.i.id(*i), fmt_list(v))))
@@ -253,7 +253,7 @@ pub(crate) struct ArgInfo {
 
 #[derive(Debug)]
 pub(crate) struct GroupInfo {
-    pub members: Vec<Idx>,
+    pub members: Array<Idx>,
 }
 
 impl IdMap {
@@ -289,10 +289,6 @@ impl IdMap {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.ids.len()
-    }
-
     pub fn id(&self, i: Idx) -> &Id {
         &self[i].id
     }
@@ -303,6 +299,10 @@ impl IdMap {
 
     pub fn get_info(&self, i: Idx) -> Option<&Info> {
         self.infos.get(i)
+    }
+
+    pub fn infos(&self) -> &[Info] {
+        &self.infos
     }
 }
 

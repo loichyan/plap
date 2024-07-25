@@ -5,10 +5,11 @@ use syn::{parenthesized, LitStr, Token};
 use crate::arg::*;
 use crate::id::*;
 use crate::schema::*;
+use crate::util::Array;
 
 pub struct Parser<'a> {
     pub(crate) schema: &'a Schema,
-    pub(crate) values: Vec<Value<'a>>,
+    pub(crate) values: Array<Value<'a>>,
     pub(crate) unacceptables: Vec<(Idx, Str)>,
     pub(crate) errors: crate::util::Errors,
 }
@@ -37,12 +38,15 @@ impl<'a> Parser<'a> {
     pub fn new(schema: &'a Schema) -> Self {
         Self {
             schema,
-            values: std::iter::repeat_with(|| Value {
-                state: ValueState::None,
-                kind: ValueKind::None,
-            })
-            .take(schema.i.len())
-            .collect(),
+            values: schema
+                .i
+                .infos()
+                .iter()
+                .map(|_| Value {
+                    state: ValueState::None,
+                    kind: ValueKind::None,
+                })
+                .collect(),
             unacceptables: <_>::default(),
             errors: <_>::default(),
         }
@@ -206,6 +210,7 @@ impl<'a> Parser<'a> {
         crate::validate::validate(self)
     }
 
+    // TODO: do not expose `reset()`
     pub fn reset(&mut self) {
         for v in self.values.iter_mut() {
             v.state = ValueState::None;

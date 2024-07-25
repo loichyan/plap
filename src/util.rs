@@ -2,6 +2,8 @@ use std::fmt;
 
 use proc_macro2::Span;
 
+pub(crate) type Array<T> = Box<[T]>;
+
 pub(crate) trait Captures<'__> {}
 
 impl<T: ?Sized> Captures<'_> for T {}
