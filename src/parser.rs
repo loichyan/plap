@@ -115,10 +115,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn add_arg<T>(&mut self, arg: &'a mut Arg<T>) -> &mut Self
-    where
-        T: 'static + syn::parse::Parse,
-    {
+    pub fn add_arg<T: ArgParse>(&mut self, arg: &'a mut Arg<T>) -> &mut Self {
         let i = arg.i;
         self.add(i, ValueKind::Arg(arg, self.schema.require_arg(i)));
         self
@@ -276,7 +273,7 @@ fn parse_value_from_literal(a: &mut dyn AnyArg, span: Span, input: LitStr) -> sy
 }
 
 pub trait ArgParse: 'static + Sized {
-    type Parser: Default;
+    type Parser;
 
     fn parse_value(parser: &mut Self::Parser, input: ParseStream) -> syn::Result<Self>;
 }

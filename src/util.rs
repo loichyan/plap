@@ -2,11 +2,11 @@ use std::fmt;
 
 use proc_macro2::Span;
 
-pub trait Captures<'__> {}
+pub(crate) trait Captures<'__> {}
 
 impl<T: ?Sized> Captures<'_> for T {}
 
-pub struct Errors {
+pub(crate) struct Errors {
     e: Option<syn::Error>,
     span: Span,
 }
@@ -50,7 +50,7 @@ impl Default for Errors {
     }
 }
 
-pub struct FmtWith<F>(pub F)
+pub(crate) struct FmtWith<F>(pub F)
 where
     F: Fn(&mut fmt::Formatter) -> fmt::Result;
 

@@ -201,7 +201,10 @@ impl Schema {
         )
     }
 
-    pub fn init_arg<T: ArgParse>(&self, id: impl Into<Id>) -> Arg<T> {
+    pub fn init_arg<T: ArgParse>(&self, id: impl Into<Id>) -> Arg<T>
+    where
+        T::Parser: Default,
+    {
         self._init_arg(id.into(), <_>::default())
     }
 
@@ -482,7 +485,10 @@ pub(crate) mod schema_field_type {
         fn add_to_parser<'a>(parser: &mut Parser<'a>, slf: &'a mut Self);
     }
 
-    impl<T: 'static + syn::parse::Parse> Sealed for Arg<T> {
+    impl<T: ArgParse> Sealed for Arg<T>
+    where
+        T::Parser: Default,
+    {
         type Schema = ArgSchema;
 
         fn register_to(target: &mut Schema, id: Id, schema: Self::Schema) {
@@ -498,7 +504,7 @@ pub(crate) mod schema_field_type {
         }
     }
 
-    impl<T: 'static + syn::parse::Parse> SchemaFieldType for Arg<T> {}
+    impl<T: ArgParse> SchemaFieldType for Arg<T> where T::Parser: Default {}
 
     impl Sealed for Group {
         type Schema = GroupSchema;
