@@ -5,7 +5,7 @@ use crate::parser::*;
 use crate::schema::*;
 use crate::util::{Captures, Errors, FmtWith};
 
-pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
+pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     let mut c = Checker {
         schema: parser.schema,
         values: &mut parser.values,
@@ -31,7 +31,7 @@ pub(crate) fn validate(mut parser: Parser) -> syn::Result<()> {
                 // each member conflicts with others
                 for (k, &i) in g.members.iter().enumerate() {
                     c.visit(i, |_, arg| {
-                        for &span in arg.spans() {
+                        for &span in arg._spans() {
                             for &j in g.members[0..k].iter().chain(g.members[(k + 1)..].iter()) {
                                 errors.add(syn_error!(span, "conflicts with `{}`", c.name(j)));
                             }
@@ -136,7 +136,7 @@ impl<'a, 'b> Checker<'a, 'b> {
         S: fmt::Display,
     {
         self.visit(i, |_, arg| {
-            for &span in arg.spans() {
+            for &span in arg._spans() {
                 errors.add(syn_error!(span, e()));
             }
         })
@@ -183,7 +183,7 @@ impl<'a, 'b> Checker<'a, 'b> {
                     panic!("`{}` is not added", self.schema.id(i));
                 }
                 ValueKind::Arg(ref a, _) => {
-                    val.state = ValueState::from_n(a.spans().len());
+                    val.state = ValueState::from_n(a._spans().len());
                     val.state
                 }
                 ValueKind::Group(_, g) => {
@@ -199,7 +199,7 @@ impl<'a, 'b> Checker<'a, 'b> {
                         }
                     }
                     let val = &mut self.values[i];
-                    if let ValueKind::Group(ref mut g, _) = val.kind {
+                    if let ValueKind::Group(g, _) = &mut val.kind {
                         g.n = n;
                         val.state = ValueState::from_n(n);
                         val.state

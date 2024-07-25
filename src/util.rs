@@ -33,8 +33,8 @@ impl Errors {
         }
     }
 
-    pub fn fail(self) -> syn::Result<()> {
-        match self.e {
+    pub fn fail(&mut self) -> syn::Result<()> {
+        match self.e.take() {
             Some(e) => Err(e),
             None => Ok(()),
         }

@@ -41,6 +41,20 @@ impl<T: ArgParse> Arg<T> {
     pub fn values(&self) -> &[T] {
         &self.values
     }
+
+    pub fn parser(&self) -> &T::Parser {
+        &self.parser
+    }
+
+    pub fn parser_mut(&mut self) -> &mut T::Parser {
+        &mut self.parser
+    }
+
+    pub fn reset(&mut self) {
+        T::reset(&mut self.parser);
+        self.spans.clear();
+        self.values.clear();
+    }
 }
 
 #[derive(Debug)]
@@ -56,6 +70,10 @@ impl Group {
 
     pub(crate) fn new(i: Idx) -> Self {
         Self { i, n: 0 }
+    }
+
+    pub fn reset(&mut self) {
+        self.n = 0;
     }
 }
 
@@ -150,8 +168,8 @@ impl<'a> Parser<'a> {
 
     fn _get_arg<T: ArgParse>(&self, id: Id) -> Option<&Arg<T>> {
         self.schema.i(id).and_then(|i| {
-            if let ValueKind::Arg(ref arg, _) = self.values[i].kind {
-                arg.as_any().downcast_ref()
+            if let ValueKind::Arg(arg, _) = &self.values[i].kind {
+                arg._as_any().downcast_ref()
             } else {
                 None
             }
@@ -164,8 +182,8 @@ impl<'a> Parser<'a> {
 
     fn _get_arg_mut<T: ArgParse>(&mut self, id: Id) -> Option<&mut Arg<T>> {
         self.schema.i(id).and_then(|i| {
-            if let ValueKind::Arg(ref mut arg, _) = self.values[i].kind {
-                arg.as_any_mut().downcast_mut()
+            if let ValueKind::Arg(arg, _) = &mut self.values[i].kind {
+                arg._as_any_mut().downcast_mut()
             } else {
                 None
             }
@@ -223,11 +241,11 @@ impl<'a> Parser<'a> {
         match inf.kind {
             ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
-                    arg.parse_value(span, input)?;
+                    arg._parser_value(span, input)?;
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg.parse_value(span, &content)?;
+                    arg._parser_value(span, &content)?;
                 } else if inf.kind == ArgKind::Flag && is_eoa(input) {
                     parse_value_from_str(*arg, span, "true")?;
                 } else {
@@ -241,7 +259,7 @@ impl<'a> Parser<'a> {
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg.parse_value(span, &content)?;
+                    arg._parser_value(span, &content)?;
                 } else {
                     return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
                 }
@@ -255,8 +273,19 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub fn finish(self) -> syn::Result<()> {
+    pub fn finish(&mut self) -> syn::Result<()> {
         crate::validate::validate(self)
+    }
+
+    pub fn reset(&mut self) {
+        for v in self.values.iter_mut() {
+            v.state = ValueState::None;
+            match &mut v.kind {
+                ValueKind::None => {}
+                ValueKind::Arg(a, _) => a._reset(),
+                ValueKind::Group(g, _) => g.reset(),
+            }
+        }
     }
 }
 
@@ -269,13 +298,15 @@ fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, input: &str) -> syn::Res
 }
 
 fn parse_value_from_literal(a: &mut dyn AnyArg, span: Span, input: LitStr) -> syn::Result<()> {
-    input.parse_with(|input: ParseStream| a.parse_value(span, input))
+    input.parse_with(|input: ParseStream| a._parser_value(span, input))
 }
 
 pub trait ArgParse: 'static + Sized {
     type Parser;
 
     fn parse_value(parser: &mut Self::Parser, input: ParseStream) -> syn::Result<Self>;
+
+    fn reset(parser: &mut Self::Parser);
 }
 
 #[derive(Debug, Default)]
@@ -287,35 +318,43 @@ impl<T: 'static + syn::parse::Parse> ArgParse for T {
     fn parse_value(_: &mut Self::Parser, input: ParseStream) -> syn::Result<Self> {
         input.parse()
     }
+
+    fn reset(_: &mut Self::Parser) {}
 }
 
 /// A type earsed and object safe [`Arg<T>`].
 pub(crate) trait AnyArg {
-    fn as_any(&self) -> &dyn Any;
+    fn _as_any(&self) -> &dyn Any;
 
-    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn _as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn spans(&self) -> &[Span];
+    fn _spans(&self) -> &[Span];
 
-    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
+    fn _parser_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
+
+    fn _reset(&mut self);
 }
 
 impl<T: ArgParse> AnyArg for Arg<T> {
-    fn as_any(&self) -> &dyn Any {
+    fn _as_any(&self) -> &dyn Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
+    fn _as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
-    fn spans(&self) -> &[Span] {
+    fn _spans(&self) -> &[Span] {
         &self.spans
     }
 
-    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
+    fn _parser_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
         let val = T::parse_value(&mut self.parser, input)?;
         self.add_value(span, val);
         Ok(())
+    }
+
+    fn _reset(&mut self) {
+        self.reset()
     }
 }

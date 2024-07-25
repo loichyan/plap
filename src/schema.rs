@@ -34,7 +34,7 @@ impl fmt::Debug for Schema {
         let fmt_map = |map: &'a [(Idx, Vec<Idx>)]| {
             FmtWith(|f| {
                 f.debug_map()
-                    .entries(map.iter().map(|&(i, ref v)| (self.i.id(i), fmt_list(v))))
+                    .entries(map.iter().map(|(i, v)| (self.i.id(*i), fmt_list(v))))
                     .finish()
             })
         };
@@ -179,7 +179,7 @@ impl Schema {
         self.i.get_info(i).map_or_else(
             || panic!("argument does not exist"),
             |inf| {
-                if let InfoKind::Arg(ref inf) = inf.kind {
+                if let InfoKind::Arg(inf) = &inf.kind {
                     inf
                 } else {
                     panic!("`{}` is not registered as an argument", inf.id);
@@ -192,7 +192,7 @@ impl Schema {
         self.i.get_info(i).map_or_else(
             || panic!("group does not exist"),
             |inf| {
-                if let InfoKind::Group(ref inf) = inf.kind {
+                if let InfoKind::Group(inf) = &inf.kind {
                     inf
                 } else {
                     panic!("`{}` is not registered as a group", inf.id);
