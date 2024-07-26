@@ -3,11 +3,11 @@
 #[macro_use]
 mod macros;
 mod arg;
+mod checker;
 mod id;
 mod parser;
 mod schema;
 mod util;
-mod validate;
 
 #[doc(inline)]
 pub use {

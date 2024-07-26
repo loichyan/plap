@@ -203,7 +203,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn finish(&mut self) -> syn::Result<()> {
-        crate::validate::validate(self)
+        crate::checker::check(self)
     }
 
     pub fn reset(&mut self) {

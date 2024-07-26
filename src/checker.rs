@@ -8,7 +8,7 @@ use crate::parser::*;
 use crate::schema::*;
 use crate::util::{product, Array, Captures, Errors, FmtWith};
 
-pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
+pub(crate) fn check(parser: &mut Parser) -> syn::Result<()> {
     let mut c = Checker {
         schema: parser.schema,
         values: &mut parser.values,
