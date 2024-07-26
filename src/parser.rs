@@ -122,20 +122,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn add_error(&mut self, e: syn::Error) {
-        self.errors.add(e);
-    }
-
-    pub fn add_result<T>(&mut self, r: syn::Result<T>) -> Option<T> {
-        match r {
-            Ok(t) => Some(t),
-            Err(e) => {
-                self.errors.add(e);
-                None
-            }
-        }
-    }
-
     pub fn parse(&mut self, input: ParseStream) -> syn::Result<()> {
         loop {
             if input.is_empty() {

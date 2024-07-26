@@ -38,7 +38,8 @@ impl Errors {
         add_err(&mut self.e, e);
     }
 
-    pub fn fail(&mut self) -> syn::Result<()> {
+    pub fn finish(&mut self) -> syn::Result<()> {
+        self.spans.clear();
         match self.e.take() {
             Some(e) => Err(e),
             None => Ok(()),

@@ -81,7 +81,7 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
         c.emit_errors(errors, i, || msg);
     }
 
-    parser.errors.fail()
+    parser.errors.finish()
 }
 
 pub(crate) struct Checker<'a, 'b> {
