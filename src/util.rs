@@ -81,3 +81,9 @@ where
         (self.0)(f)
     }
 }
+
+pub(crate) fn product<'a, T>(arr: &'a [T]) -> impl '_ + Iterator<Item = (&'a T, &'a T)> {
+    arr.iter()
+        .enumerate()
+        .flat_map(|(k, t1)| arr[(k + 1)..].iter().map(move |t2| (t1, t2)))
+}

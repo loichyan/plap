@@ -139,8 +139,8 @@ fn parse_field(field: &Field) -> syn::Result<(&Field, &Ident, FieldKind)> {
         .ident
         .as_ref()
         .ok_or_else(|| syn_error!(Span::call_site(), "tuple struct is not allowed"))?;
-    let ty = FieldKind::from_syn(&field.ty)
-        .ok_or_else(|| syn_error!(ident.span(), "unsupported type"))?;
+    let ty =
+        FieldKind::infer(&field.ty).ok_or_else(|| syn_error!(ident.span(), "unsupported type"))?;
     Ok((field, ident, ty))
 }
 
@@ -155,7 +155,7 @@ enum FieldKind {
 }
 
 impl FieldKind {
-    fn from_syn(ty: &Type) -> Option<Self> {
+    fn infer(ty: &Type) -> Option<Self> {
         match ty {
             Type::Path(ref p) => {
                 if p.path.leading_colon.is_some() {

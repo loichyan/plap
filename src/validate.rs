@@ -6,7 +6,7 @@ use crate::arg::*;
 use crate::id::*;
 use crate::parser::*;
 use crate::schema::*;
-use crate::util::{Array, Captures, Errors, FmtWith};
+use crate::util::{product, Array, Captures, Errors, FmtWith};
 
 pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     let mut c = Checker {
@@ -24,7 +24,7 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     // states should be updated to avoid circular references
     if !parser.help_spans.is_empty() {
         errors.reset();
-        let help = build_help(c);
+        let help = build_help(&c).expect("failed to build usage");
         for &span in parser.help_spans.iter() {
             errors.add_info(span, &help);
         }
@@ -43,10 +43,8 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
             ValueKind::Arg(..) => c.emit_errors(errors, i, |_| "value is duplicated"),
             ValueKind::Group(_, g) => {
                 // each member conflicts with others
-                for (k, &i) in g.members.iter().enumerate() {
-                    for &dest in g.members[(k + 1)..].iter() {
-                        c.emit_conflicts(errors, i, dest);
-                    }
+                for (&i, &dest) in product(&g.members) {
+                    c.emit_conflicts(errors, i, dest);
                 }
             }
             ValueKind::None => unreachable!(),
@@ -65,20 +63,20 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     }
 
     // check: requirements
-    for &(i, ref requirements) in c
+    for &(i, ref dests) in c
         .schema
         .requirements
         .iter()
         .filter(|&&(i, _)| c.provided(i))
     {
-        for dest in requirements.iter().copied().filter(|&i| !c.provided(i)) {
+        for dest in dests.iter().copied().filter(|&i| !c.provided(i)) {
             c.emit_errors(errors, i, |_| format!("requires `{}`", c.name(dest)));
         }
     }
 
     // check: conflicts
-    for &(i, ref conflicts) in c.schema.conflicts.iter().filter(|&&(i, _)| c.provided(i)) {
-        for dest in conflicts.iter().copied().filter(|&i| c.provided(i)) {
+    for &(i, ref dests) in c.schema.conflicts.iter().filter(|&&(i, _)| c.provided(i)) {
+        for dest in dests.iter().copied().filter(|&i| c.provided(i)) {
             c.emit_conflicts(errors, i, dest);
         }
     }
@@ -91,33 +89,99 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     errors.finish()
 }
 
-fn build_help(c: Checker) -> String {
-    let lines = c
-        .values
+fn build_help(c: &Checker) -> Result<String, std::fmt::Error> {
+    struct Help<'a> {
+        id: &'a Id,
+        help: Option<&'a str>, // none on groups
+        required: bool,
+        multiple: bool,
+        conflicts_with: Vec<Idx>,
+    }
+
+    let add_conflicts = |helps: &mut [Help], i: Idx, dest: Idx| {
+        c.visit(i, |i, _| {
+            c.visit(dest, |dest, _| {
+                helps[i].conflicts_with.push(dest);
+                helps[dest].conflicts_with.push(i);
+            });
+        });
+    };
+
+    let mut helps = c
+        .schema
+        .infos()
         .iter()
-        .enumerate()
-        .map(|(i, v)| {
-            if let ValueKind::Arg(_, inf) = &v.kind {
-                format!("{}:\n    {}\n", c.schema.id(i), inf.help)
+        .map(|inf| {
+            let help = if let InfoKind::Arg(a) = &inf.kind {
+                Some(&*a.help)
             } else {
-                String::new()
+                None
+            };
+            Help {
+                id: &inf.id,
+                help,
+                required: false,
+                multiple: true,
+                conflicts_with: <_>::default(),
             }
         })
         .collect::<Array<_>>();
-    // TODO:
-    //
+
+    for &i in c.schema.required.iter() {
+        helps[i].required = true;
+    }
+
+    for &i in c.schema.exclusives.iter() {
+        match c.value(i).kind {
+            ValueKind::Arg(..) => helps[i].multiple = false,
+            ValueKind::Group(_, g) => {
+                for (&i, &dest) in product(&g.members) {
+                    add_conflicts(&mut helps, i, dest);
+                }
+            }
+            ValueKind::None => unreachable!(),
+        }
+    }
+
+    for &(i, ref dests) in c.schema.conflicts.iter() {
+        for &dest in dests.iter() {
+            c.visit(i, |i, _| {
+                c.visit(dest, |dest, _| {
+                    add_conflicts(&mut helps, i, dest);
+                });
+            });
+        }
+    }
+
     // arg1:
     //     Argument #1
     //
     //     Required:       true
     //     Mutlitple:      false
-    //     Conflicts with: arg1, arg2
+    //     Conflicts with: arg2, arg3
     //
     // ...
+    use fmt::Write;
+    let mut f = String::from("USAGE:\n\n");
+    for h in helps.iter() {
+        let usage = if let Some(u) = h.help { u } else { continue };
+        write!(
+            &mut f,
+            "{}:\n    {}\n\n    Required:       {}\n    Mutlitple:      {}",
+            h.id, usage, h.required, h.multiple
+        )?;
+        if !h.conflicts_with.is_empty() {
+            write!(
+                &mut f,
+                "\n    Conflicts with: {}",
+                c.join_ids(&h.conflicts_with)
+            )?;
+        }
+        f.push_str("\n\n");
+    }
+    f.pop(); // remove trailing newlines
 
-    std::iter::once("USAGE:\n")
-        .chain(lines.iter().map(String::as_str))
-        .collect()
+    Ok(f)
 }
 
 pub(crate) struct Checker<'a, 'b> {
@@ -144,27 +208,46 @@ impl<'a, 'b> Checker<'a, 'b> {
 
     fn name(&self, i: Idx) -> impl '_ + fmt::Display + Captures<'a> + Captures<'b> {
         use fmt::Display;
-
         FmtWith(move |f| {
             match self.value(i).kind {
                 // fast path for a single argument
                 ValueKind::Arg(..) => self.id(i).fmt(f),
                 ValueKind::Group(..) => {
-                    let mut last = None;
+                    let mut first = true;
                     self.try_visit(i, |i, _| {
-                        if let Some(i) = last.replace(i) {
-                            self.id(i).fmt(f)?;
+                        if !first {
                             f.write_str(" | ")?;
+                        } else {
+                            first = false;
                         }
+                        self.id(i).fmt(f)?;
                         Ok(())
                     })?;
-                    if let Some(i) = last {
-                        self.id(i).fmt(f)?;
-                    }
                     Ok(())
                 }
                 ValueKind::None => unreachable!(),
             }
+        })
+    }
+
+    fn join_ids<'i>(
+        &'i self,
+        iter: &'i [Idx],
+    ) -> impl 'i + fmt::Display + Captures<'a> + Captures<'b> {
+        use fmt::Display;
+        FmtWith(|f| {
+            let mut iter = iter.iter().copied();
+            let first = if let Some(t) = iter.next() {
+                t
+            } else {
+                return Ok(());
+            };
+            self.id(first).fmt(f)?;
+            for i in iter {
+                f.write_str(", ")?;
+                self.id(i).fmt(f)?;
+            }
+            Ok(())
         })
     }
 
