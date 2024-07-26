@@ -4,7 +4,7 @@ use crate::arg::*;
 use crate::id::*;
 use crate::parser::*;
 use crate::schema::*;
-use crate::util::{Captures, Errors, FmtWith};
+use crate::util::{Array, Captures, Errors, FmtWith};
 
 pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     let mut c = Checker {
@@ -13,9 +13,20 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
     };
     let errors = &mut parser.errors;
 
-    // check if each argument or group is provided
+    // update state of each argument or group
     for i in 0..c.values.len() {
         c.update_state(0, i);
+    }
+
+    // print help and skip the rest checks,
+    // states should be updated to avoid circular references
+    if !parser.help_spans.is_empty() {
+        errors.reset();
+        let help = build_help(c);
+        for &span in parser.help_spans.iter() {
+            errors.add_info(span, &help);
+        }
+        return errors.finish();
     }
 
     // check: exclusives
@@ -81,7 +92,36 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
         c.emit_errors(errors, i, || msg);
     }
 
-    parser.errors.finish()
+    errors.finish()
+}
+
+fn build_help(c: Checker) -> String {
+    let lines = c
+        .values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            if let ValueKind::Arg(_, inf) = &v.kind {
+                format!("{}:\n    {}\n", c.schema.id(i), inf.help)
+            } else {
+                String::new()
+            }
+        })
+        .collect::<Array<_>>();
+    // TODO:
+    //
+    // arg1:
+    //     Argument #1
+    //
+    //     Required:       true
+    //     Mutlitple:      false
+    //     Conflicts with: arg1, arg2
+    //
+    // ...
+
+    std::iter::once("USAGE:\n")
+        .chain(lines.iter().map(String::as_str))
+        .collect()
 }
 
 pub(crate) struct Checker<'a, 'b> {
@@ -195,7 +235,7 @@ impl<'a, 'b> Checker<'a, 'b> {
                     for &member in g.members.iter() {
                         if self.update_state(i, member).provided() {
                             n += 1;
-                            // continue check to detect circular reference and
+                            // continue check to detect circular references and
                             // count all provided arguments
                         }
                     }

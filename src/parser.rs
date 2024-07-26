@@ -11,6 +11,7 @@ pub struct Parser<'a> {
     pub(crate) schema: &'a Schema,
     pub(crate) values: Array<Value<'a>>,
     pub(crate) unacceptables: Vec<(Idx, Str)>,
+    pub(crate) help_spans: Vec<Span>,
     pub(crate) errors: crate::util::Errors,
 }
 
@@ -47,6 +48,7 @@ impl<'a> Parser<'a> {
                 })
                 .collect(),
             unacceptables: <_>::default(),
+            help_spans: <_>::default(),
             errors: <_>::default(),
         }
     }
@@ -193,31 +195,11 @@ impl<'a> Parser<'a> {
             }
             ArgKind::Help => {
                 parse_value_from_str(*arg, span, "")?;
-                self.errors.add_info(span, self.build_help());
+                self.help_spans.push(span);
             }
         }
 
         Ok(())
-    }
-
-    // TODO: show relations
-    fn build_help(&self) -> String {
-        let lines = self
-            .values
-            .iter()
-            .enumerate()
-            .map(|(i, v)| {
-                if let ValueKind::Arg(_, inf) = &v.kind {
-                    format!("{}:\n    {}\n", self.schema.id(i), inf.help)
-                } else {
-                    String::new()
-                }
-            })
-            .collect::<Array<_>>();
-
-        std::iter::once("USAGE:\n")
-            .chain(lines.iter().map(String::as_str))
-            .collect()
     }
 
     pub fn finish(&mut self) -> syn::Result<()> {
@@ -234,6 +216,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.unacceptables.clear();
+        self.help_spans.clear();
         self.errors.reset();
     }
 }
