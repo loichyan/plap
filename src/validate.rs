@@ -1,5 +1,7 @@
 use std::fmt;
 
+use proc_macro2::Span;
+
 use crate::arg::*;
 use crate::id::*;
 use crate::parser::*;
@@ -38,17 +40,13 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
         .filter(|&i| c.provided_many(i))
     {
         match &c.value(i).kind {
-            ValueKind::Arg(..) => c.emit_errors(errors, i, || "value is duplicated"),
+            ValueKind::Arg(..) => c.emit_errors(errors, i, |_| "value is duplicated"),
             ValueKind::Group(_, g) => {
                 // each member conflicts with others
                 for (k, &i) in g.members.iter().enumerate() {
-                    c.visit(i, |_, arg| {
-                        for &span in arg.spans() {
-                            for &j in g.members[0..k].iter().chain(g.members[(k + 1)..].iter()) {
-                                errors.add(syn_error!(span, "conflicts with `{}`", c.name(j)));
-                            }
-                        }
-                    });
+                    for &dest in g.members[(k + 1)..].iter() {
+                        c.emit_conflicts(errors, i, dest);
+                    }
                 }
             }
             ValueKind::None => unreachable!(),
@@ -74,22 +72,20 @@ pub(crate) fn validate(parser: &mut Parser) -> syn::Result<()> {
         .filter(|&&(i, _)| c.provided(i))
     {
         for dest in requirements.iter().copied().filter(|&i| !c.provided(i)) {
-            c.emit_errors(errors, i, || format!("requires `{}`", c.name(dest)));
+            c.emit_errors(errors, i, |_| format!("requires `{}`", c.name(dest)));
         }
     }
 
     // check: conflicts
     for &(i, ref conflicts) in c.schema.conflicts.iter().filter(|&&(i, _)| c.provided(i)) {
         for dest in conflicts.iter().copied().filter(|&i| c.provided(i)) {
-            // conflicts are always bidirectional
-            c.emit_errors(errors, i, || format!("conflicts with `{}`", c.name(dest)));
-            c.emit_errors(errors, dest, || format!("conflicts with `{}`", c.name(i)));
+            c.emit_conflicts(errors, i, dest);
         }
     }
 
     // check: unacceptables
     for &(i, ref msg) in parser.unacceptables.iter().filter(|&&(i, _)| c.provided(i)) {
-        c.emit_errors(errors, i, || msg);
+        c.emit_errors(errors, i, |_| msg);
     }
 
     errors.finish()
@@ -172,23 +168,32 @@ impl<'a, 'b> Checker<'a, 'b> {
         })
     }
 
-    fn emit_errors<S>(&self, errors: &mut Errors, i: Idx, mut e: impl FnMut() -> S)
+    fn emit_conflicts(&self, errors: &mut Errors, i: Idx, dest: Idx) {
+        self.visit_span(i, |i, i_span| {
+            self.visit_span(dest, |dest, dest_span| {
+                // conflicts are always bidirectional
+                errors.add(syn_error!(i_span, "conflicts with `{}`", self.id(dest)));
+                errors.add(syn_error!(dest_span, "conflicts with `{}`", self.id(i)));
+            });
+        });
+    }
+
+    fn emit_errors<S>(&self, errors: &mut Errors, i: Idx, mut e: impl FnMut(Idx) -> S)
     where
         S: fmt::Display,
     {
-        self.visit(i, |_, arg| {
-            for &span in arg.spans() {
-                errors.add(syn_error!(span, e()));
-            }
-        })
+        self.visit_span(i, |i, span| errors.add(syn_error!(span, e(i))));
+    }
+
+    fn visit_span(&self, i: Idx, mut f: impl FnMut(Idx, Span)) {
+        self.visit(i, |i, v| v.spans().iter().for_each(|&s| f(i, s)));
     }
 
     fn visit(&self, i: Idx, mut f: impl FnMut(Idx, &dyn AnyArg)) {
-        self.try_visit(i, move |i, a| {
+        let _ = self.try_visit(i, move |i, a| {
             f(i, a);
             Ok::<_, std::convert::Infallible>(())
-        })
-        .ok();
+        });
     }
 
     fn try_visit<E>(
