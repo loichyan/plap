@@ -157,31 +157,29 @@ fn build_help(c: &Checker) -> Result<String, std::fmt::Error> {
     //     Argument #1
     //
     //     Required:       true
-    //     Mutlitple:      false
+    //     Multiple:      false
     //     Conflicts with: arg2, arg3
     //
     // ...
     use fmt::Write;
-    let mut f = String::from("USAGE:\n\n");
+    let mut rendered = String::from("USAGE:\n\n");
     for h in helps.iter() {
-        let usage = if let Some(u) = h.help { u } else { continue };
-        write!(
-            &mut f,
-            "{}:\n    {}\n\n    Required:       {}\n    Mutlitple:      {}",
-            h.id, usage, h.required, h.multiple
-        )?;
-        if !h.conflicts_with.is_empty() {
-            write!(
-                &mut f,
-                "\n    Conflicts with: {}",
-                c.join_ids(&h.conflicts_with)
-            )?;
+        let help = if let Some(h) = h.help { h } else { continue };
+        let f = &mut rendered;
+        {
+            writeln!(f, "{}:", h.id)?;
+            writeln!(f, "    {}", help)?;
+            writeln!(f, "    Required:       {}", h.required)?;
+            writeln!(f, "    Multiple:       {}", h.multiple)?;
         }
-        f.push_str("\n\n");
+        if !h.conflicts_with.is_empty() {
+            writeln!(f, "    Conflicts with: {}", c.join_ids(&h.conflicts_with))?;
+        }
+        f.push('\n');
     }
-    f.pop(); // remove trailing newlines
+    rendered.pop(); // remove trailing newlines
 
-    Ok(f)
+    Ok(rendered)
 }
 
 pub(crate) struct Checker<'a, 'b> {
