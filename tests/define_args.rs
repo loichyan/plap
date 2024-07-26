@@ -1,4 +1,4 @@
-#[plap_derive::define_args {
+#[plap_macros::define_args {
     struct my_arg {
         /// Argument #1
         #[plap(is_expr, required)]

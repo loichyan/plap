@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "plap-derive"
+name = "plap-macros"
 version = "0.0.0"

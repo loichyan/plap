@@ -1,5 +1,5 @@
 [workspace]
-members = ["derive"]
+members = ["macros"]
 
 [package]
 name = "plap"
@@ -23,7 +23,7 @@ proc-macro2 = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false, features = ["parsing"] }
 
 [dev-dependencies]
-plap-derive = { path = "derive" }
+plap-macros = { path = "macros" }
 quote = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false, features = [
     "extra-traits",

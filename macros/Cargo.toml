@@ -1,5 +1,5 @@
 [package]
-name = "plap-derive"
+name = "plap-macros"
 version = "0.0.0"
 publish = false
 authors = ["Loi Chyan <loichyan@foxmail.com>"]

@@ -9,7 +9,7 @@ mod parser;
 /// Tests `plap::define_args!` in place.
 ///
 /// ```
-/// #[plap_derive::define_args {
+/// #[plap_macros::define_args {
 ///     struct my_arg {
 ///         /// Argument #1
 ///         #[plap(is_expr, multiple, required)]
