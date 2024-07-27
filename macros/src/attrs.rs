@@ -20,17 +20,17 @@ pub(crate) fn parse_group_schema(attrs: &[Attribute]) -> syn::Result<GroupSchema
 
 fn parse_attrs(parser: &mut Parser, attrs: &[Attribute]) -> syn::Result<()> {
     for attr in attrs.iter() {
-        let ident = if let Some(i) = attr.meta.path().get_ident() {
+        let key = if let Some(i) = attr.meta.path().get_ident() {
             i
         } else {
             continue;
         };
-        if ident == "plap" {
+        if key == "plap" {
             attr.parse_args_with(|input: ParseStream| parser.parse(input))?;
-        } else if ident == "doc" {
+        } else if key == "doc" {
             if let Some(val) = get_attr_str(attr) {
                 let help: &mut Arg<LitStr> = parser.get_arg_mut("help").unwrap();
-                help.add_value(ident.span(), val);
+                help.add(key.clone(), val);
             }
         }
     }

@@ -267,7 +267,7 @@ impl<'a, 'b> Checker<'a, 'b> {
     }
 
     fn visit_span(&self, i: Idx, mut f: impl FnMut(Idx, Span)) {
-        self.visit(i, |i, v| v.spans().iter().for_each(|&s| f(i, s)));
+        self.visit(i, |i, v| v.keys().iter().for_each(|s| f(i, s.span())));
     }
 
     fn visit(&self, i: Idx, mut f: impl FnMut(Idx, &dyn AnyArg)) {
@@ -310,7 +310,7 @@ impl<'a, 'b> Checker<'a, 'b> {
                     panic!("`{}` is not added", self.id(i));
                 }
                 ValueKind::Arg(ref a, _) => {
-                    val.state = ValueState::from_n(a.spans().len());
+                    val.state = ValueState::from_n(a.keys().len());
                     val.state
                 }
                 ValueKind::Group(_, g) => {

@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use proc_macro2::Span;
+use proc_macro2::Ident;
 use syn::parse::ParseStream;
 
 use crate::parser::*;
@@ -10,7 +10,7 @@ use crate::schema::*;
 pub struct Arg<T: ArgParse> {
     pub(crate) i: Idx,
     parser: T::Parser,
-    spans: Vec<Span>,
+    keys: Vec<Ident>,
     values: Vec<T>,
 }
 
@@ -23,18 +23,18 @@ impl<T: ArgParse> Arg<T> {
         Self {
             i,
             parser,
-            spans: <_>::default(),
+            keys: <_>::default(),
             values: <_>::default(),
         }
     }
 
-    pub fn add_value(&mut self, span: Span, value: T) {
-        self.spans.push(span);
+    pub fn add(&mut self, key: Ident, value: T) {
+        self.keys.push(key);
         self.values.push(value);
     }
 
-    pub fn spans(&self) -> &[Span] {
-        &self.spans
+    pub fn keys(&self) -> &[Ident] {
+        &self.keys
     }
 
     pub fn values(&self) -> &[T] {
@@ -77,7 +77,7 @@ impl<T: ArgParse> Arg<T> {
 
     pub fn reset(&mut self) {
         T::reset(&mut self.parser);
-        self.spans.clear();
+        self.keys.clear();
         self.values.clear();
     }
 }
@@ -88,9 +88,9 @@ pub(crate) trait AnyArg {
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn spans(&self) -> &[Span];
+    fn keys(&self) -> &[Ident];
 
-    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()>;
+    fn parse_value(&mut self, key: Ident, input: ParseStream) -> syn::Result<()>;
 
     fn reset(&mut self);
 }
@@ -104,13 +104,13 @@ impl<T: ArgParse> AnyArg for Arg<T> {
         self
     }
 
-    fn spans(&self) -> &[Span] {
-        &self.spans
+    fn keys(&self) -> &[Ident] {
+        &self.keys
     }
 
-    fn parse_value(&mut self, span: Span, input: ParseStream) -> syn::Result<()> {
+    fn parse_value(&mut self, key: Ident, input: ParseStream) -> syn::Result<()> {
         let val = T::parse_value(&mut self.parser, input)?;
-        self.add_value(span, val);
+        self.add(key, val);
         Ok(())
     }
 

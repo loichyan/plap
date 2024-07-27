@@ -150,14 +150,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_next(&mut self, input: ParseStream) -> syn::Result<()> {
-        let ident = input
+        let key = input
             .parse::<Option<Ident>>()?
             .ok_or_else(|| syn_error!(input.span(), "expected an identifier"))?;
-        let span = ident.span();
+        let span = key.span();
 
         let (arg, inf) = self
             .schema
-            .i(ident.to_string())
+            .i(key.to_string())
             .and_then(|i| {
                 if let ValueKind::Arg(ref mut arg, inf) = self.values[i].kind {
                     Some((arg, inf))
@@ -170,13 +170,13 @@ impl<'a> Parser<'a> {
         match inf.kind {
             ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
-                    arg.parse_value(span, input)?;
+                    arg.parse_value(key, input)?;
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg.parse_value(span, &content)?;
+                    arg.parse_value(key, &content)?;
                 } else if inf.kind == ArgKind::Flag && is_eoa(input) {
-                    parse_value_from_str(*arg, span, "true")?;
+                    parse_value_from_str(*arg, key, "true")?;
                 } else {
                     return Err(syn_error!(span, "expected `= <value>` or `(<value>)`"));
                 }
@@ -184,17 +184,17 @@ impl<'a> Parser<'a> {
             ArgKind::TokenTree => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     let content = input.parse::<syn::LitStr>()?;
-                    parse_value_from_literal(*arg, span, content)?;
+                    parse_value_from_literal(*arg, key, content)?;
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg.parse_value(span, &content)?;
+                    arg.parse_value(key, &content)?;
                 } else {
                     return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
                 }
             }
             ArgKind::Help => {
-                parse_value_from_str(*arg, span, "")?;
+                parse_value_from_str(*arg, key, "")?;
                 self.help_spans.push(span);
             }
         }
@@ -225,12 +225,13 @@ fn is_eoa(input: ParseStream) -> bool {
     input.peek(Token![,]) || input.is_empty()
 }
 
-fn parse_value_from_str(a: &mut dyn AnyArg, span: Span, input: &str) -> syn::Result<()> {
-    parse_value_from_literal(a, span, LitStr::new(input, span))
+fn parse_value_from_str(a: &mut dyn AnyArg, key: Ident, input: &str) -> syn::Result<()> {
+    let input = LitStr::new(input, key.span());
+    parse_value_from_literal(a, key, input)
 }
 
-fn parse_value_from_literal(a: &mut dyn AnyArg, span: Span, input: LitStr) -> syn::Result<()> {
-    input.parse_with(|input: ParseStream| a.parse_value(span, input))
+fn parse_value_from_literal(a: &mut dyn AnyArg, key: Ident, input: LitStr) -> syn::Result<()> {
+    input.parse_with(|input: ParseStream| a.parse_value(key, input))
 }
 
 pub trait ArgParse: 'static + Sized {
