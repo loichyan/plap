@@ -1,15 +1,13 @@
-[workspace]
-members = ["macros", "slim"]
-
 [package]
-name = "plap"
+name = "plap-slim"
 version = "0.0.0"
-license = "MIT OR Apache-2.0"
+publish = false
 authors = ["Loi Chyan <loichyan@foxmail.com>"]
+license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.56"
 
-description = "An argument parser for proc-macros"
+description = "A lightweight and sensible argument parser for proc-macros"
 keywords = []
 categories = []
 repository = "https://github.com/loichyan/plap"
@@ -21,13 +19,3 @@ string = []
 [dependencies]
 proc-macro2 = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false, features = ["parsing"] }
-
-[dev-dependencies]
-plap-macros = { path = "macros" }
-quote = { version = "1.0", default-features = false }
-syn = { version = "2.0", default-features = false, features = [
-    "extra-traits",
-    "full",
-    "parsing",
-] }
-trybuild = "1.0"
