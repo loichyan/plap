@@ -11,8 +11,12 @@ _default:
     @command {{ _just }} --list
 
 check:
-    $CARGO clippy --all
-    $CARGO clippy --all --features string
+    $CARGO clippy --all --features=checking
+    $CARGO clippy --all --features=string
+    $CARGO clippy --all --features=checking,string
+
+check-fmt:
+    $CARGO fmt --check
 
 fmt:
     $CARGO fmt

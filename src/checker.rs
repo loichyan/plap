@@ -4,6 +4,7 @@ use proc_macro2::{Ident, Span};
 
 use crate::errors::Errors;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "checking")))]
 pub trait AnyArg {
     fn name(&self) -> &str;
 
@@ -20,6 +21,7 @@ impl<T> AnyArg for crate::arg::Arg<T> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "checking")))]
 #[derive(Default)]
 pub struct Checker {
     errors: Errors,

@@ -52,29 +52,31 @@ macro_rules! define_args {
                 return $crate::private::arg::unknown_argument(key);
             }
 
-            fn check(
-                &self,
-                checker: &mut $crate::private::Checker,
-            ) {
-                // generate argument variables, which can be referred in #[check(...)]
-                $(let $f_name: &dyn $crate::private::AnyArg = &self.$f_name;)*
+            $crate::private!(@cfg(feature = "checking")
+                fn check(
+                    &self,
+                    checker: &mut $crate::private::Checker,
+                ) {
+                    // generate argument variables, which can be referred in #[check(...)]
+                    $(let $f_name: &dyn $crate::private::AnyArg = &self.$f_name;)*
 
-                // generate group variables
-                $($(let $group: &[&dyn $crate::private::AnyArg] = &$group_val;)*)*
+                    // generate group variables
+                    $($(let $group: &[&dyn $crate::private::AnyArg] = &$group_val;)*)*
 
-                // add container level checks, including groups, requirements, etc
-                $($($crate::private::Checker::$check(
-                    checker,
-                    $($check_val,)*
-                );)*)*
+                    // add container level checks, including groups, requirements, etc
+                    $($($crate::private::Checker::$check(
+                        checker,
+                        $($check_val,)*
+                    );)*)*
 
-                // add field level checks, where the field is passed as the first parameter
-                $($($($crate::private::Checker::$f_check(
-                    checker,
-                    $f_name,
-                    $($f_check_val,)*
-                );)*)*)*
-            }
+                    // add field level checks, where the field is passed as the first parameter
+                    $($($($crate::private::Checker::$f_check(
+                        checker,
+                        $f_name,
+                        $($f_check_val,)*
+                    );)*)*)*
+                }
+            );
         }
     };
     ($(#[doc = $doc:literal])*
@@ -121,6 +123,8 @@ pub trait Args {
 
     fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Result<(), Ident>>;
 
+    #[cfg(feature = "checking")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "checking")))]
     fn check(&self, checker: &mut crate::checker::Checker);
 }
 

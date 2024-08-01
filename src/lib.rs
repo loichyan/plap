@@ -1,7 +1,9 @@
-#[macro_use]
-mod define_args;
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod arg;
+#[macro_use]
+mod define_args;
+#[cfg(feature = "checking")]
 mod checker;
 mod errors;
 mod parser;
@@ -9,6 +11,7 @@ mod parser;
 mod str;
 
 pub use arg::Arg;
+#[cfg(feature = "checking")]
 pub use checker::{AnyArg, Checker};
 pub use define_args::{ArgAttrs, ArgEnum, Args};
 pub use errors::Errors;
@@ -17,12 +20,11 @@ pub use parser::{ArgKind, Parser};
 /// **NOT PUBLIC APIS**
 #[doc(hidden)]
 pub mod private {
-    use proc_macro2::Ident;
-    pub use syn;
-
     pub use crate::*;
 
     pub mod arg {
+        use proc_macro2::Ident;
+
         use super::*;
 
         pub type ParseResult<T> = syn::Result<Result<T, Ident>>;
@@ -71,4 +73,20 @@ pub mod private {
             Ok(Err(key))
         }
     }
+}
+
+/// **NOT PUBLIC APIS**
+#[cfg(feature = "checking")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! private {
+    (@cfg(feature = "checking") $($tt:tt)*) => { $($tt)* };
+}
+
+/// **NOT PUBLIC APIS**
+#[cfg(not(feature = "checking"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! private {
+    (@cfg(feature = "checking") $($tt:tt)*) => {};
 }
