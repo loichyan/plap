@@ -6,6 +6,7 @@ use crate::parser::{ArgKind, Parser};
 macro_rules! define_args {
     ($(#[doc = $doc:literal])*
     $(#[::$attr:meta])*
+    $(#[group($($group:ident = $group_val:expr),* $(,)?)])*
     $(#[check($($check:ident $(= $check_val:expr)?),* $(,)?)])*
     $vis:vis struct $name:ident {$(
         $(#[doc = $f_doc:literal])*
@@ -57,6 +58,9 @@ macro_rules! define_args {
             ) {
                 // generate argument variables, which can be referred in #[check(...)]
                 $(let $f_name: &dyn $crate::private::AnyArg = &self.$f_name;)*
+
+                // generate group variables
+                $($(let $group: &[&dyn $crate::private::AnyArg] = &$group_val;)*)*
 
                 // add container level checks, including groups, requirements, etc
                 $($($crate::private::Checker::$check(

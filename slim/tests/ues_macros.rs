@@ -3,13 +3,14 @@ use syn::{LitBool, LitStr};
 
 define_args! {
     #[::derive(Debug)]
-    #[check(exclusive_group = [is_expr, help])]
+    #[group(grp1 = [is_expr, help])]
+    #[check(exclusive_group = grp1)]
     pub(crate) struct MyArgStruct {
         #[arg(is_flag)]
         #[check(required, requires = help)]
         pub is_expr: Arg<LitBool>,
         #[arg(is_expr)]
-        #[check(requires_all = [is_expr, help])]
+        #[check(requires_all = grp1)]
         pub help: Arg<LitStr>,
     }
 }
