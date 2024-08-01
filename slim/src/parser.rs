@@ -36,10 +36,7 @@ impl<'a> Parser<'a> {
     pub fn next_key(&mut self) -> syn::Result<Ident> {
         self.input.parse::<Option<Ident>>().and_then(|i| match i {
             Some(i) => Ok(i),
-            None => Err(syn::Error::new(
-                consume(self.input)?,
-                "expected an identifier",
-            )),
+            None => Err(self.input.error("expected an identifier")),
         })
     }
 
@@ -89,25 +86,26 @@ impl<'a> Parser<'a> {
         }?;
 
         if !self.is_eof() && input.parse::<Option<Token![,]>>()?.is_none() {
-            Err(syn::Error::new(consume(input)?, "expected a `,`"))
+            Err(input.error("expected a `,`"))
         } else {
             Ok(r)
         }
     }
 
-    /// Consumes all tokens up to the EOA.
+    /// Consumes the next token and returns its span. If it reaches
+    /// [`EOA`](Self::is_eoa), [`None`] is returned.
     ///
-    /// If no error is returned, it stops at the beginning of the next argument
-    /// and returns the last span of all consumed tokens. This is typically used
-    /// to eat unexpected tokens of the current argument if an error occurs
-    /// during parsing.
+    /// This is typically used to eat unexpected tokens of the current argument
+    /// if an error occurs during parsing.
     pub fn consume_next(&mut self) -> syn::Result<Option<Span>> {
-        let input = self.input;
-        let mut last = None;
-        while input.parse::<Option<Token![,]>>()?.is_none() && !input.is_empty() {
-            last = Some(consume(input)?);
+        if self.is_eoa() {
+            Ok(None)
+        } else {
+            self.input
+                .parse::<proc_macro2::TokenTree>()
+                .map(|t| t.span())
+                .map(Some)
         }
-        Ok(last)
     }
 
     pub fn parse_all_with(
@@ -123,11 +121,20 @@ impl<'a> Parser<'a> {
             match f(self) {
                 Ok(Ok(_)) => continue,
                 Ok(Err(unknown)) => errors.add_at(unknown.span(), "unknown argument"),
-                Err(e) => errors.add(e),
+                Err(e) => {
+                    errors.add(e);
+                    // In most cases, the returned error points to the input's
+                    // current span, so we need to skip the current token to
+                    // prevent an "unexpected tokens" error from appearing in
+                    // the same place.
+                    if self.consume_next()?.is_none() {
+                        continue;
+                    }
+                }
             }
 
             // eat all unexpected tokens
-            if let Some(span) = self.consume_next()? {
+            while let Some(span) = self.consume_next()? {
                 errors.add_at(span, "unexpected tokens");
             }
         }
@@ -140,10 +147,6 @@ impl<'a> Parser<'a> {
     {
         self.parse_all_with(|parser| A::parse_next(args, parser))
     }
-}
-
-fn consume(input: ParseStream) -> syn::Result<Span> {
-    input.parse::<proc_macro2::TokenTree>().map(|t| t.span())
 }
 
 fn parse_value_from_str<T>(
