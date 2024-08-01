@@ -52,6 +52,10 @@ impl DynParser {
     pub fn get(ty: &Ident) -> Option<Self> {
         DYN_PARSER_MAP.with(|m| m.get(ty).copied()).map(|f| f())
     }
+
+    pub fn parse(&self, input: ParseStream) -> syn::Result<()> {
+        (self.0)(input)
+    }
 }
 
 pub(crate) struct DynValue;

@@ -5,7 +5,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use syn::parse::ParseStream;
 use syn::{Attribute, Data, DeriveInput, Field, GenericArgument, ItemStruct, PathArguments, Type};
 
-use crate::parser::*;
+use crate::dyn_parser::*;
 
 pub fn expand(attr: ItemStruct, item: DeriveInput) -> syn::Result<TokenStream> {
     let (schema, mut values) = parse_schema(&attr)?;

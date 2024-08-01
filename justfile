@@ -5,7 +5,7 @@ set shell := ["/usr/bin/env", "bash", "-euo", "pipefail", "-c"]
 
 _just := quote(just_executable()) + " --justfile=" + quote(justfile())
 _setup_bash := "set -euo pipefail"
-CARGO := "cargo"
+CARGO := env("CARGO", "cargo")
 
 _default:
     @command {{ _just }} --list

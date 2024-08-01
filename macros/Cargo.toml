@@ -17,6 +17,7 @@ proc-macro = true
 
 [dependencies]
 plap = { version = "=0.0.0", path = "..", features = ["string"] }
+plap-slim = { version = "=0.0.0", path = "../slim", features = ["string"] }
 proc-macro2 = "1.0"
 quote = { version = "1.0" }
 syn = { version = "2.0", default-features = false, features = [
