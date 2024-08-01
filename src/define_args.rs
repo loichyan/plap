@@ -1,4 +1,5 @@
 use proc_macro2::Ident;
+use syn::parse::ParseStream;
 
 use crate::parser::{ArgKind, Parser};
 
@@ -118,10 +119,16 @@ macro_rules! define_args {
     };
 }
 
-pub trait Args {
+pub trait Args: Sized {
     fn init() -> Self;
 
     fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Result<(), Ident>>;
+
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut new = Self::init();
+        Parser::new(input).parse_all(&mut new)?;
+        Ok(new)
+    }
 
     #[cfg(feature = "checking")]
     #[cfg_attr(docsrs, doc(cfg(feature = "checking")))]
