@@ -2,255 +2,164 @@ use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
 use syn::{parenthesized, LitStr, Token};
 
-use crate::arg::*;
-use crate::id::*;
-use crate::schema::*;
-use crate::util::Array;
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ArgKind {
+    Expr,
+    Flag,
+    TokenTree,
+    Help,
+}
+
+impl Default for ArgKind {
+    fn default() -> Self {
+        ArgKind::TokenTree
+    }
+}
 
 pub struct Parser<'a> {
-    pub(crate) schema: &'a Schema,
-    pub(crate) values: Array<Value<'a>>,
-    pub(crate) unacceptables: Vec<(Idx, Str)>,
-    pub(crate) help_spans: Vec<Span>,
-    pub(crate) errors: crate::util::Errors,
-}
-
-pub(crate) struct Value<'a> {
-    pub state: ValueState,
-    pub kind: ValueKind<'a>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) enum ValueState {
-    None,
-    Busy,
-    Empty,
-    Provided,
-    ProvidedMany,
-}
-
-pub(crate) enum ValueKind<'a> {
-    None,
-    Arg(&'a mut dyn AnyArg, &'a ArgInfo),
-    Group(&'a mut Group, &'a GroupInfo),
+    input: ParseStream<'a>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(schema: &'a Schema) -> Self {
-        Self {
-            schema,
-            values: schema
-                .infos()
-                .iter()
-                .map(|_| Value {
-                    state: ValueState::None,
-                    kind: ValueKind::None,
-                })
-                .collect(),
-            unacceptables: <_>::default(),
-            help_spans: <_>::default(),
-            errors: <_>::default(),
-        }
+    pub fn new(input: ParseStream<'a>) -> Self {
+        Self { input }
     }
 
-    pub fn add_span(&mut self, span: Span) -> &mut Self {
-        self.errors.add_span(span);
-        self
+    pub fn is_eof(&self) -> bool {
+        self.input.is_empty()
     }
 
-    fn add(&mut self, i: Idx, value: ValueKind<'a>) {
-        let val = &mut self.values[i];
-        match val.kind {
-            ValueKind::None => val.kind = value,
-            ValueKind::Arg(..) => panic!("`{}` has been added as an argument", self.schema.id(i)),
-            ValueKind::Group(..) => panic!("`{}` has been added as a group", self.schema.id(i)),
-        }
+    pub fn is_eoa(&self) -> bool {
+        self.input.peek(Token![,]) || self.is_eof()
     }
 
-    pub fn add_arg<T: ArgParse>(&mut self, arg: &'a mut Arg<T>) -> &mut Self {
-        let i = arg.i;
-        self.add(i, ValueKind::Arg(arg, self.schema.require_arg(i)));
-        self
-    }
-
-    pub fn add_group(&mut self, group: &'a mut Group) -> &mut Self {
-        let i = group.i;
-        self.add(i, ValueKind::Group(group, self.schema.require_group(i)));
-        self
-    }
-
-    pub fn require_empty(&mut self, id: impl Into<Id>) -> &mut Self {
-        self._require_empty(id.into(), "not allowed".into())
-    }
-
-    pub fn require_empty_with_msg(&mut self, id: impl Into<Id>, msg: impl Into<Str>) -> &mut Self {
-        self._require_empty(id.into(), msg.into())
-    }
-
-    fn _require_empty(&mut self, id: Id, msg: Str) -> &mut Self {
-        self.unacceptables.push((self.schema.require(&id), msg));
-        self
-    }
-
-    pub fn has(&self, id: impl Into<Id>) -> bool {
-        self.schema.i(id.into()).is_some()
-    }
-
-    pub fn get_arg<T: ArgParse>(&self, id: impl Into<Id>) -> Option<&Arg<T>> {
-        self._get_arg(id.into())
-    }
-
-    fn _get_arg<T: ArgParse>(&self, id: Id) -> Option<&Arg<T>> {
-        self.schema.i(id).and_then(|i| {
-            if let ValueKind::Arg(arg, _) = &self.values[i].kind {
-                arg.as_any().downcast_ref()
-            } else {
-                None
-            }
+    pub fn next_key(&mut self) -> syn::Result<Ident> {
+        self.input.parse::<Option<Ident>>().and_then(|i| match i {
+            Some(i) => Ok(i),
+            None => Err(self.input.error("expected an identifier")),
         })
     }
 
-    pub fn get_arg_mut<T: ArgParse>(&mut self, id: impl Into<Id>) -> Option<&mut Arg<T>> {
-        self._get_arg_mut(id.into())
+    pub fn next_value<T>(&mut self, kind: ArgKind) -> syn::Result<T>
+    where
+        T: syn::parse::Parse,
+    {
+        self.next_value_with(kind, T::parse)
     }
 
-    fn _get_arg_mut<T: ArgParse>(&mut self, id: Id) -> Option<&mut Arg<T>> {
-        self.schema.i(id).and_then(|i| {
-            if let ValueKind::Arg(arg, _) = &mut self.values[i].kind {
-                arg.as_any_mut().downcast_mut()
-            } else {
-                None
-            }
-        })
-    }
+    pub fn next_value_with<T>(
+        &mut self,
+        kind: ArgKind,
+        f: impl FnOnce(ParseStream) -> syn::Result<T>,
+    ) -> syn::Result<T> {
+        let input = self.input;
 
-    pub fn parse(&mut self, input: ParseStream) -> syn::Result<()> {
-        loop {
-            if input.is_empty() {
-                break;
-            }
-
-            if let Err(e) = self.parse_next(input) {
-                self.errors.add(e);
-            } else if input.parse::<Option<Token![,]>>()?.is_some() {
-                // successfully parse an argument
-                continue;
-            } else if !input.is_empty() {
-                self.errors.add(syn_error!(input.span(), "expected a `,`"));
-            } else {
-                break;
-            }
-
-            // consume all input till the next comma
-            while input.parse::<Option<Token![,]>>()?.is_none() && !input.is_empty() {
-                input.parse::<proc_macro2::TokenTree>()?;
-            }
-        }
-        Ok(())
-    }
-
-    fn parse_next(&mut self, input: ParseStream) -> syn::Result<()> {
-        let key = input
-            .parse::<Option<Ident>>()?
-            .ok_or_else(|| syn_error!(input.span(), "expected an identifier"))?;
-        let span = key.span();
-
-        let (arg, inf) = self
-            .schema
-            .i(key.to_string())
-            .and_then(|i| {
-                if let ValueKind::Arg(ref mut arg, inf) = self.values[i].kind {
-                    Some((arg, inf))
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| syn_error!(span, "unknown argument"))?;
-
-        match inf.kind {
+        let r = match kind {
             ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
-                    arg.parse_value(key, input)?;
+                    f(input)
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg.parse_value(key, &content)?;
-                } else if inf.kind == ArgKind::Flag && is_eoa(input) {
-                    parse_value_from_str(*arg, key, "true")?;
+                    f(&content)
+                } else if kind == ArgKind::Flag && self.is_eoa() {
+                    parse_value_from_str("true", f)
+                        .map_err(|e| panic!("a flag parser must support `true`: {}", e))
                 } else {
-                    return Err(syn_error!(span, "expected `= <value>` or `(<value>)`"));
+                    Err(input.error("expected `= <value>` or `(<value>)`"))
                 }
             }
             ArgKind::TokenTree => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     let content = input.parse::<syn::LitStr>()?;
-                    parse_value_from_literal(*arg, key, content)?;
+                    parse_value_from_literal(content, f)
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
-                    arg.parse_value(key, &content)?;
+                    f(&content)
                 } else {
-                    return Err(syn_error!(span, "expected `= \"<value>\"` or `(<value>)`"));
+                    Err(input.error("expected `= \"<value>\"` or `(<value>)`"))
                 }
             }
-            ArgKind::Help => {
-                parse_value_from_str(*arg, key, "")?;
-                self.help_spans.push(span);
+            ArgKind::Help => parse_value_from_str("", f)
+                .map_err(|e| panic!("a help parser must support ``: {}", e)),
+        }?;
+
+        if !self.is_eof() && input.parse::<Option<Token![,]>>()?.is_none() {
+            Err(input.error("expected a `,`"))
+        } else {
+            Ok(r)
+        }
+    }
+
+    /// Consumes the next token and returns its span. If it reaches
+    /// [`EOA`](Self::is_eoa), [`None`] is returned.
+    ///
+    /// This is typically used to eat unexpected tokens of the current argument
+    /// if an error occurs during parsing.
+    pub fn consume_next(&mut self) -> syn::Result<Option<Span>> {
+        if self.is_eoa() {
+            Ok(None)
+        } else {
+            self.input
+                .parse::<proc_macro2::TokenTree>()
+                .map(|t| t.span())
+                .map(Some)
+        }
+    }
+
+    pub fn parse_all_with(
+        &mut self,
+        mut f: impl FnMut(&mut Self) -> syn::Result<Result<(), Ident>>,
+    ) -> syn::Result<()> {
+        let mut errors = crate::errors::Errors::default();
+        loop {
+            if self.is_eof() {
+                break;
+            }
+
+            match f(self) {
+                Ok(Ok(_)) => continue,
+                Ok(Err(unknown)) => errors.add_at(unknown.span(), "unknown argument"),
+                Err(e) => {
+                    errors.add(e);
+                    // In most cases, the returned error points to the input's
+                    // current span, so we need to skip the current token to
+                    // prevent an "unexpected tokens" error from appearing in
+                    // the same place.
+                    if self.consume_next()?.is_none() {
+                        continue;
+                    }
+                }
+            }
+
+            // eat all unexpected tokens
+            while let Some(span) = self.consume_next()? {
+                errors.add_at(span, "unexpected tokens");
             }
         }
-
-        Ok(())
+        errors.fail()
     }
 
-    pub fn finish(&mut self) -> syn::Result<()> {
-        crate::checker::check(self)
-    }
-
-    pub fn reset(&mut self) {
-        for v in self.values.iter_mut() {
-            v.state = ValueState::None;
-            match &mut v.kind {
-                ValueKind::None => {}
-                ValueKind::Arg(a, _) => a.reset(),
-                ValueKind::Group(g, _) => g.reset(),
-            }
-        }
-        self.unacceptables.clear();
-        self.help_spans.clear();
-        self.errors.reset();
+    pub fn parse_all<A>(&mut self, args: &mut A) -> syn::Result<()>
+    where
+        A: crate::define_args::Args,
+    {
+        self.parse_all_with(|parser| A::parse_next(args, parser))
     }
 }
 
-fn is_eoa(input: ParseStream) -> bool {
-    input.peek(Token![,]) || input.is_empty()
+fn parse_value_from_str<T>(
+    input: &str,
+    f: impl FnOnce(ParseStream) -> syn::Result<T>,
+) -> syn::Result<T> {
+    let input = LitStr::new(input, Span::call_site());
+    parse_value_from_literal(input, f)
 }
 
-fn parse_value_from_str(a: &mut dyn AnyArg, key: Ident, input: &str) -> syn::Result<()> {
-    let input = LitStr::new(input, key.span());
-    parse_value_from_literal(a, key, input)
-}
-
-fn parse_value_from_literal(a: &mut dyn AnyArg, key: Ident, input: LitStr) -> syn::Result<()> {
-    input.parse_with(|input: ParseStream| a.parse_value(key, input))
-}
-
-pub trait ArgParse: 'static + Sized {
-    type Parser;
-
-    fn parse_value(parser: &mut Self::Parser, input: ParseStream) -> syn::Result<Self>;
-
-    fn reset(parser: &mut Self::Parser);
-}
-
-#[derive(Debug, Default)]
-pub struct SynParser;
-
-impl<T: 'static + syn::parse::Parse> ArgParse for T {
-    type Parser = SynParser;
-
-    fn parse_value(_: &mut Self::Parser, input: ParseStream) -> syn::Result<Self> {
-        input.parse()
-    }
-
-    fn reset(_: &mut Self::Parser) {}
+fn parse_value_from_literal<T>(
+    input: LitStr,
+    f: impl FnOnce(ParseStream) -> syn::Result<T>,
+) -> syn::Result<T> {
+    input.parse_with(|input: ParseStream| f(input))
 }

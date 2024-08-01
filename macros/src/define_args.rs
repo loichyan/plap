@@ -1,62 +1,142 @@
 use std::collections::BTreeMap;
 
-use plap::{Arg, Group, Parser, Schema};
+use plap::{Arg, ArgAttrs, Errors, Parser};
 use proc_macro2::{Ident, Span, TokenStream};
-use syn::parse::ParseStream;
+use syn::parse::{Nothing, ParseStream};
 use syn::{Attribute, Data, DeriveInput, Field, GenericArgument, ItemStruct, PathArguments, Type};
 
-use crate::dyn_parser::*;
+use crate::args::{CheckArgs, ContainerCheckArgs};
+use crate::dyn_parser::DynParser;
 
-pub fn expand(attr: ItemStruct, item: DeriveInput) -> syn::Result<TokenStream> {
-    let (schema, mut values) = parse_schema(&attr)?;
+pub fn expand(input: ItemStruct, item: DeriveInput) -> syn::Result<TokenStream> {
+    let (groups, check) = crate::args::parse_container_args(&input.attrs)?;
+    let mut defs = parse_defs(&input)?;
+    defs.extend(groups.into_iter().map(|(k, v)| (k, Def::Group(v))));
 
-    let mut parser = Parser::new(&schema);
-    for (_, v) in values.iter_mut() {
-        match v {
-            ValueKind::Arg(a) => {
-                parser.add_arg(a);
+    let mut errors = Errors::default();
+    Checker {
+        c: plap::Checker::default(),
+        target: &input.ident,
+        check: &check,
+        defs: &mut defs,
+        errors: &mut errors,
+    }
+    .check_item(&item)?;
+
+    errors.fail()
+}
+
+fn parse_defs(input: &ItemStruct) -> syn::Result<ArgDefs> {
+    let mut defs = ArgDefs::default();
+    for field in input.fields.iter() {
+        let (name, parser) = parse_field(field)?;
+        let (arg, check) = crate::args::parse_field_args(&field.attrs)?;
+        defs.insert(
+            name.clone(),
+            Def::Arg(ArgDef {
+                i: Arg::from_string(name.to_string()),
+                parser,
+                attrs: arg.build_arg_attrs()?,
+                check,
+            }),
+        );
+    }
+    Ok(defs)
+}
+
+fn parse_field(field: &Field) -> syn::Result<(&Ident, DynParser)> {
+    let ident = field
+        .ident
+        .as_ref()
+        .ok_or_else(|| syn_error!(Span::call_site(), "field name is required"))?;
+    let parser = infer_arg_type(&field.ty)
+        .and_then(DynParser::get)
+        .ok_or_else(|| syn_error!(ident.span(), "unsupported type"))?;
+    Ok((ident, parser))
+}
+
+fn infer_arg_type(ty: &Type) -> Option<&Ident> {
+    match ty {
+        Type::Path(ref p) => {
+            if p.path.leading_colon.is_some() {
+                return None;
             }
-            ValueKind::Group(g) => {
-                parser.add_group(g);
+            let ty = p.path.segments.first()?;
+            if ty.ident == "Arg" {
+                let arg = if let PathArguments::AngleBracketed(ref a) = ty.arguments {
+                    a
+                } else {
+                    return None;
+                };
+                let arg = arg.args.first()?;
+                let ty = if let GenericArgument::Type(Type::Path(p)) = arg {
+                    p
+                } else {
+                    return None;
+                };
+                if ty.qself.is_some() {
+                    return None;
+                }
+                ty.path.get_ident()
+            } else {
+                None
             }
+        }
+        _ => None,
+    }
+}
+
+pub(crate) type ArgDefs = BTreeMap<Ident, Def>;
+
+pub(crate) enum Def {
+    Arg(ArgDef),
+    Group(GroupDef),
+}
+
+pub(crate) struct ArgDef {
+    pub i: Arg<Nothing>,
+    pub parser: DynParser,
+    pub attrs: ArgAttrs,
+    pub check: CheckArgs,
+}
+
+pub(crate) struct GroupDef {
+    pub members: Vec<Ident>,
+}
+
+impl Def {
+    pub fn as_arg(&self) -> Option<&ArgDef> {
+        match self {
+            Def::Arg(a) => Some(a),
+            Def::Group(_) => None,
         }
     }
 
-    let mut errors = None;
-    Checker {
-        parser,
-        target: &attr.ident,
-        errors: &mut errors,
-    }
-    .check_input(&item)?;
-
-    // generate a macro for runtime reflection
-    let mut tokens = {
-        let ident = &attr.ident;
-        let debug = format!("{:#?}", schema);
-        quote::quote!(
-            macro_rules! #ident {
-                (@debug) => (#debug);
-            }
-        )
-    };
-
-    // append errors
-    if let Some(e) = errors {
-        tokens.extend(e.into_compile_error());
+    pub fn as_arg_mut(&mut self) -> Option<&mut ArgDef> {
+        match self {
+            Def::Arg(a) => Some(a),
+            Def::Group(_) => None,
+        }
     }
 
-    Ok(tokens)
+    pub fn as_group(&self) -> Option<&GroupDef> {
+        match self {
+            Def::Arg(_) => None,
+            Def::Group(g) => Some(g),
+        }
+    }
 }
 
 struct Checker<'a> {
-    parser: Parser<'a>,
+    c: plap::Checker,
     target: &'a Ident,
-    errors: &'a mut Option<syn::Error>,
+    check: &'a ContainerCheckArgs,
+    defs: &'a mut ArgDefs,
+    errors: &'a mut Errors,
 }
 
-impl<'a> Checker<'a> {
-    fn check_input(mut self, item: &DeriveInput) -> syn::Result<()> {
+impl Checker<'_> {
+    fn check_item(&mut self, item: &DeriveInput) -> syn::Result<()> {
         self.check_attrs(&item.attrs)?;
         match &item.data {
             Data::Enum(e) => {
@@ -79,117 +159,55 @@ impl<'a> Checker<'a> {
     }
 
     fn check_attrs(&mut self, attrs: &[Attribute]) -> syn::Result<()> {
+        // parse defined arguments
         let mut found_any = false;
         for attr in attrs.iter() {
-            let ident = if let Some(i) = attr.meta.path().get_ident() {
-                i
-            } else {
-                continue;
-            };
-            if ident == self.target {
-                found_any = true;
-                attr.parse_args_with(|input: ParseStream| {
-                    self.parser.add_span(ident.span());
-                    self.parser.parse(input)
-                })?;
+            if let Some(ident) = attr.meta.path().get_ident() {
+                if ident == self.target {
+                    let r = attr.parse_args_with(|input: ParseStream| {
+                        found_any = true;
+                        self.c.with_default_span(ident.span());
+                        self.parse_args(input)
+                    });
+                    self.errors.add_result(r);
+                }
             }
         }
         if !found_any {
             return Ok(());
         }
 
-        if let Err(e) = self.parser.finish() {
-            if let Some(err) = &mut self.errors {
-                err.combine(e);
-            } else {
-                *self.errors = Some(e);
+        // perform defined checks
+        self.errors
+            .add_result(self.check.check(&mut self.c, self.defs));
+        for (field, def) in self.defs.iter() {
+            if let Some(arg) = def.as_arg() {
+                self.errors
+                    .add_result(arg.check.check(&mut self.c, self.defs, field));
             }
         }
-        self.parser.reset();
+        self.errors.add_result(self.c.finish());
+
+        // reset
+        for def in self.defs.values_mut() {
+            if let Some(arg) = def.as_arg_mut() {
+                arg.i.clear();
+            }
+        }
         Ok(())
     }
-}
 
-fn parse_schema(input: &ItemStruct) -> syn::Result<(Schema, BTreeMap<Box<str>, ValueKind>)> {
-    let mut schema = Schema::default();
-    let mut values = BTreeMap::default();
-
-    for field in input.fields.iter().map(parse_field) {
-        let (field, ident, ty) = field?;
-        let id = ident.to_string();
-        match ty {
-            FieldKind::Arg(p) => {
-                schema.register_arg(&id, crate::attrs::parse_arg_schema(&field.attrs)?);
-                let arg = schema.init_arg_with(&id, p);
-                values.insert(id.into(), ValueKind::Arg(arg));
+    fn parse_args(&mut self, input: ParseStream) -> syn::Result<()> {
+        let mut parser = Parser::new(input);
+        parser.parse_all_with(|parser| {
+            let key = parser.next_key()?;
+            if let Some(arg) = self.defs.get_mut(&key).and_then(Def::as_arg_mut) {
+                parser.next_value_with(arg.attrs.get_kind(), |input| arg.parser.parse(input))?;
+                arg.i.add(key, Nothing);
+                Ok(Ok(()))
+            } else {
+                Ok(Err(key))
             }
-            FieldKind::Group => {
-                schema.register_group(&id, crate::attrs::parse_group_schema(&field.attrs)?);
-                let group = schema.init_group(&id);
-                values.insert(id.into(), ValueKind::Group(group));
-            }
-        }
-    }
-
-    Ok((schema, values))
-}
-
-fn parse_field(field: &Field) -> syn::Result<(&Field, &Ident, FieldKind)> {
-    let ident = field
-        .ident
-        .as_ref()
-        .ok_or_else(|| syn_error!(Span::call_site(), "tuple struct is not allowed"))?;
-    let ty =
-        FieldKind::infer(&field.ty).ok_or_else(|| syn_error!(ident.span(), "unsupported type"))?;
-    Ok((field, ident, ty))
-}
-
-enum ValueKind {
-    Arg(Arg<DynValue>),
-    Group(Group),
-}
-
-enum FieldKind {
-    Arg(DynParser),
-    Group,
-}
-
-impl FieldKind {
-    fn infer(ty: &Type) -> Option<Self> {
-        match ty {
-            Type::Path(ref p) => {
-                if p.path.leading_colon.is_some() {
-                    return None;
-                }
-                let ty = p.path.segments.first()?;
-                if ty.ident == "Arg" {
-                    let arg = if let PathArguments::AngleBracketed(ref a) = ty.arguments {
-                        a
-                    } else {
-                        return None;
-                    };
-                    let arg = arg.args.first()?;
-                    let ty = if let GenericArgument::Type(Type::Path(p)) = arg {
-                        p
-                    } else {
-                        return None;
-                    };
-                    if ty.qself.is_some() {
-                        return None;
-                    }
-                    let ident = ty.path.get_ident()?;
-                    DynParser::get(ident).map(Self::Arg)
-                } else if ty.ident == "Group" {
-                    if let PathArguments::None = ty.arguments {
-                        Some(Self::Group)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+        })
     }
 }

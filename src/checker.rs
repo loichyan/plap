@@ -1,362 +1,238 @@
 use std::fmt;
 
-use proc_macro2::Span;
+use proc_macro2::{Ident, Span};
 
-use crate::arg::*;
-use crate::id::*;
-use crate::parser::*;
-use crate::schema::*;
-use crate::util::{product, Array, Captures, Errors, FmtWith};
+use crate::errors::Errors;
 
-pub(crate) fn check(parser: &mut Parser) -> syn::Result<()> {
-    let mut c = Checker {
-        schema: parser.schema,
-        values: &mut parser.values,
-    };
-    let errors = &mut parser.errors;
+pub trait AnyArg {
+    fn name(&self) -> &str;
 
-    // update state of each argument or group
-    for i in 0..c.values.len() {
-        c.update_state(0, i);
-    }
-
-    // print help and skip the rest checks,
-    // states should be updated to avoid circular references
-    if !parser.help_spans.is_empty() {
-        errors.reset();
-        let help = build_help(&c).expect("failed to build usage");
-        for &span in parser.help_spans.iter() {
-            errors.add_info(span, &help);
-        }
-        return errors.finish();
-    }
-
-    // check: exclusives
-    for i in c
-        .schema
-        .exclusives
-        .iter()
-        .copied()
-        .filter(|&i| c.provided_many(i))
-    {
-        match &c.value(i).kind {
-            ValueKind::Arg(..) => c.emit_errors(errors, i, |_| "value is duplicated"),
-            ValueKind::Group(_, g) => {
-                // each member conflicts with others
-                for (&i, &dest) in product(&g.members) {
-                    c.emit_conflicts(errors, i, dest);
-                }
-            }
-            ValueKind::None => unreachable!(),
-        }
-    }
-
-    // check: required
-    for i in c
-        .schema
-        .required
-        .iter()
-        .copied()
-        .filter(|&i| !c.provided(i))
-    {
-        errors.add_msg(format!("`{}` is required", c.name(i)));
-    }
-
-    // check: requirements
-    for &(i, ref dests) in c
-        .schema
-        .requirements
-        .iter()
-        .filter(|&&(i, _)| c.provided(i))
-    {
-        for dest in dests.iter().copied().filter(|&i| !c.provided(i)) {
-            c.emit_errors(errors, i, |_| format!("requires `{}`", c.name(dest)));
-        }
-    }
-
-    // check: conflicts
-    for &(i, ref dests) in c.schema.conflicts.iter().filter(|&&(i, _)| c.provided(i)) {
-        for dest in dests.iter().copied().filter(|&i| c.provided(i)) {
-            c.emit_conflicts(errors, i, dest);
-        }
-    }
-
-    // check: unacceptables
-    for &(i, ref msg) in parser.unacceptables.iter().filter(|&&(i, _)| c.provided(i)) {
-        c.emit_errors(errors, i, |_| msg);
-    }
-
-    errors.finish()
+    fn keys(&self) -> &[Ident];
 }
 
-fn build_help(c: &Checker) -> Result<String, std::fmt::Error> {
-    struct Help<'a> {
-        id: &'a Id,
-        help: Option<&'a str>, // none on groups
-        required: bool,
-        multiple: bool,
-        conflicts_with: Vec<Idx>,
+impl<T> AnyArg for crate::arg::Arg<T> {
+    fn name(&self) -> &str {
+        self.name()
     }
 
-    let add_conflicts = |helps: &mut [Help], i: Idx, dest: Idx| {
-        c.visit(i, |i, _| {
-            c.visit(dest, |dest, _| {
-                helps[i].conflicts_with.push(dest);
-                helps[dest].conflicts_with.push(i);
-            });
-        });
-    };
-
-    let mut helps = c
-        .schema
-        .infos()
-        .iter()
-        .map(|inf| {
-            let help = if let InfoKind::Arg(a) = &inf.kind {
-                Some(&*a.help)
-            } else {
-                None
-            };
-            Help {
-                id: &inf.id,
-                help,
-                required: false,
-                multiple: true,
-                conflicts_with: <_>::default(),
-            }
-        })
-        .collect::<Array<_>>();
-
-    for &i in c.schema.required.iter() {
-        helps[i].required = true;
+    fn keys(&self) -> &[Ident] {
+        self.keys()
     }
-
-    for &i in c.schema.exclusives.iter() {
-        match c.value(i).kind {
-            ValueKind::Arg(..) => helps[i].multiple = false,
-            ValueKind::Group(_, g) => {
-                for (&i, &dest) in product(&g.members) {
-                    add_conflicts(&mut helps, i, dest);
-                }
-            }
-            ValueKind::None => unreachable!(),
-        }
-    }
-
-    for &(i, ref dests) in c.schema.conflicts.iter() {
-        for &dest in dests.iter() {
-            c.visit(i, |i, _| {
-                c.visit(dest, |dest, _| {
-                    add_conflicts(&mut helps, i, dest);
-                });
-            });
-        }
-    }
-
-    // arg1:
-    //     Argument #1
-    //
-    //     Required:       true
-    //     Multiple:      false
-    //     Conflicts with: arg2, arg3
-    //
-    // ...
-    use fmt::Write;
-    let mut rendered = String::from("USAGE:\n\n");
-    for h in helps.iter() {
-        let help = if let Some(h) = h.help { h } else { continue };
-        let f = &mut rendered;
-        {
-            writeln!(f, "{}:", h.id)?;
-            writeln!(f, "    {}", help)?;
-            writeln!(f, "    Required:       {}", h.required)?;
-            writeln!(f, "    Multiple:       {}", h.multiple)?;
-        }
-        if !h.conflicts_with.is_empty() {
-            writeln!(f, "    Conflicts with: {}", c.join_ids(&h.conflicts_with))?;
-        }
-        f.push('\n');
-    }
-    rendered.pop(); // remove trailing newlines
-
-    Ok(rendered)
 }
 
-pub(crate) struct Checker<'a, 'b> {
-    pub schema: &'a Schema,
-    pub values: &'b mut [Value<'a>],
+#[derive(Default)]
+pub struct Checker {
+    errors: Errors,
+    spans: Vec<Span>,
 }
 
-impl<'a, 'b> Checker<'a, 'b> {
-    fn provided(&self, i: Idx) -> bool {
-        self.value(i).state.provided()
+impl Checker {
+    pub fn with_result(&mut self, res: syn::Result<()>) -> &mut Self {
+        self.errors.add_result(res);
+        self
     }
 
-    fn provided_many(&self, i: Idx) -> bool {
-        self.value(i).state == ValueState::ProvidedMany
+    pub fn with_error(&mut self, err: syn::Error) -> &mut Self {
+        self.errors.add(err);
+        self
     }
 
-    fn value(&self, i: Idx) -> &Value<'a> {
-        &self.values[i]
+    pub fn with_error_at(&mut self, span: Span, msg: impl fmt::Display) -> &mut Self {
+        self.errors.add_at(span, msg);
+        self
     }
 
-    fn id(&self, i: Idx) -> &Id {
-        self.schema.id(i)
+    pub fn with_default_span(&mut self, span: Span) -> &mut Self {
+        self.spans.push(span);
+        self
     }
 
-    fn name(&self, i: Idx) -> impl '_ + fmt::Display + Captures<'a> + Captures<'b> {
-        use fmt::Display;
-        FmtWith(move |f| {
-            match self.value(i).kind {
-                // fast path for a single argument
-                ValueKind::Arg(..) => self.id(i).fmt(f),
-                ValueKind::Group(..) => {
-                    let mut first = true;
-                    self.try_visit(i, |i, _| {
-                        if !first {
-                            f.write_str(" | ")?;
-                        } else {
-                            first = false;
-                        }
-                        self.id(i).fmt(f)?;
-                        Ok(())
-                    })?;
-                    Ok(())
-                }
-                ValueKind::None => unreachable!(),
+    pub fn with_error_at_default(&mut self, msg: impl fmt::Display + Clone) -> &mut Self {
+        if self.spans.is_empty() {
+            self.errors.add_at(Span::call_site(), msg);
+        } else {
+            for &span in self.spans.iter() {
+                self.errors.add_at(span, msg.clone());
             }
-        })
+        }
+        self
     }
 
-    fn join_ids<'i>(
-        &'i self,
-        iter: &'i [Idx],
-    ) -> impl 'i + fmt::Display + Captures<'a> + Captures<'b> {
-        use fmt::Display;
-        FmtWith(|f| {
-            let mut iter = iter.iter().copied();
-            let first = if let Some(t) = iter.next() {
-                t
-            } else {
-                return Ok(());
-            };
-            self.id(first).fmt(f)?;
-            for i in iter {
-                f.write_str(", ")?;
-                self.id(i).fmt(f)?;
+    /* ---------------------- *
+     * container level checks *
+     * ---------------------- */
+
+    pub fn required_all<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._required_all(args.as_ref())
+    }
+
+    fn _required_all(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+        for &a in args {
+            self.required(a);
+        }
+        self
+    }
+
+    pub fn required_any<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._required_any(args.as_ref())
+    }
+
+    fn _required_any(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+        if !has_any(args) {
+            self.with_error_at_default(format!("`{}` is required", fmt_group(args)));
+        }
+        self
+    }
+
+    pub fn exclusive_group<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._exclusive_group(args.as_ref())
+    }
+
+    fn _exclusive_group(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+        for (&a, &b) in combination(args) {
+            self.conflicts_with(a, b);
+        }
+        self
+    }
+
+    /* ------------------ *
+     * field level checks *
+     * ------------------ */
+
+    pub fn required(&mut self, arg: &dyn AnyArg) -> &mut Self {
+        if arg.keys().is_empty() {
+            self.with_error_at_default(format!("`{}` is required", arg.name()));
+        }
+        self
+    }
+
+    pub fn exclusive(&mut self, a: &dyn AnyArg) -> &mut Self {
+        let keys = a.keys();
+        if keys.len() > 1 {
+            for k in keys {
+                self.with_error_at(k.span(), "too many values (<= 1)");
             }
-            Ok(())
-        })
+        }
+        self
     }
 
-    fn emit_conflicts(&self, errors: &mut Errors, i: Idx, dest: Idx) {
-        self.visit_span(i, |i, i_span| {
-            self.visit_span(dest, |dest, dest_span| {
+    pub fn requires(&mut self, a: &dyn AnyArg, b: &dyn AnyArg) -> &mut Self {
+        if b.keys().is_empty() {
+            let b_name = b.name();
+            for k in a.keys() {
+                self.with_error_at(k.span(), format!("requires `{}`", b_name));
+            }
+        }
+        self
+    }
+
+    pub fn requires_all<'b>(
+        &mut self,
+        a: &dyn AnyArg,
+        b: impl AsRef<[&'b dyn AnyArg]>,
+    ) -> &mut Self {
+        self._requires_all(a, b.as_ref())
+    }
+
+    fn _requires_all(&mut self, a: &dyn AnyArg, b: &[&dyn AnyArg]) -> &mut Self {
+        for &b in b {
+            self.requires(a, b);
+        }
+        self
+    }
+
+    pub fn requires_any<'b>(
+        &mut self,
+        a: &dyn AnyArg,
+        b: impl AsRef<[&'b dyn AnyArg]>,
+    ) -> &mut Self {
+        self._requires_any(a, b.as_ref())
+    }
+
+    fn _requires_any(&mut self, a: &dyn AnyArg, args: &[&dyn AnyArg]) -> &mut Self {
+        if !has_any(args) {
+            for k in a.keys() {
+                self.with_error_at(k.span(), format!("requires `{}`", fmt_group(args)));
+            }
+        }
+        self
+    }
+
+    pub fn conflicts_with(&mut self, a: &dyn AnyArg, b: &dyn AnyArg) -> &mut Self {
+        let (a_name, a_keys) = (a.name(), a.keys());
+        let (b_name, b_keys) = (b.name(), b.keys());
+        for a in a_keys {
+            for b in b_keys {
                 // conflicts are always bidirectional
-                errors.add(syn_error!(i_span, "conflicts with `{}`", self.id(dest)));
-                errors.add(syn_error!(dest_span, "conflicts with `{}`", self.id(i)));
-            });
-        });
-    }
-
-    fn emit_errors<S>(&self, errors: &mut Errors, i: Idx, mut e: impl FnMut(Idx) -> S)
-    where
-        S: fmt::Display,
-    {
-        self.visit_span(i, |i, span| errors.add(syn_error!(span, e(i))));
-    }
-
-    fn visit_span(&self, i: Idx, mut f: impl FnMut(Idx, Span)) {
-        self.visit(i, |i, v| v.keys().iter().for_each(|s| f(i, s.span())));
-    }
-
-    fn visit(&self, i: Idx, mut f: impl FnMut(Idx, &dyn AnyArg)) {
-        let _ = self.try_visit(i, move |i, a| {
-            f(i, a);
-            Ok::<_, std::convert::Infallible>(())
-        });
-    }
-
-    fn try_visit<E>(
-        &self,
-        i: Idx,
-        mut f: impl FnMut(Idx, &dyn AnyArg) -> Result<(), E>,
-    ) -> Result<(), E> {
-        self._try_visit(i, &mut f)
-    }
-
-    fn _try_visit<E>(
-        &self,
-        i: Idx,
-        f: &mut dyn FnMut(Idx, &dyn AnyArg) -> Result<(), E>,
-    ) -> Result<(), E> {
-        match self.values[i].kind {
-            ValueKind::Arg(ref a, _) => f(i, *a),
-            ValueKind::Group(_, g) => {
-                for &member in g.members.iter() {
-                    self._try_visit(member, f)?;
-                }
-                Ok(())
+                self.with_error_at(a.span(), format!("conflicts with `{}`", b_name));
+                self.with_error_at(b.span(), format!("conflicts with `{}`", a_name));
             }
-            _ => unreachable!(),
         }
+        self
     }
 
-    fn update_state(&mut self, prev: Idx, i: Idx) -> ValueState {
-        let val = &mut self.values[i];
-        match val.state {
-            ValueState::None => match val.kind {
-                ValueKind::None => {
-                    panic!("`{}` is not added", self.id(i));
-                }
-                ValueKind::Arg(ref a, _) => {
-                    val.state = ValueState::from_n(a.keys().len());
-                    val.state
-                }
-                ValueKind::Group(_, g) => {
-                    val.state = ValueState::Busy;
-                    // g is copied, so that we can pass the borrow check
-                    let _ = val;
-                    let mut n = 0;
-                    for &member in g.members.iter() {
-                        if self.update_state(i, member).provided() {
-                            n += 1;
-                            // continue check to detect circular references and
-                            // count all provided arguments
-                        }
-                    }
-                    let val = &mut self.values[i];
-                    if let ValueKind::Group(g, _) = &mut val.kind {
-                        g.n = n;
-                        val.state = ValueState::from_n(n);
-                        val.state
-                    } else {
-                        unreachable!()
-                    }
-                }
-            },
-            ValueState::Busy => {
-                panic!(
-                    "found circular groups: `{}` and `{}`",
-                    self.id(i),
-                    self.id(prev)
-                );
-            }
-            state => state,
+    pub fn conflicts_with_all<'b>(
+        &mut self,
+        a: &dyn AnyArg,
+        b: impl AsRef<[&'b dyn AnyArg]>,
+    ) -> &mut Self {
+        self._conflicts_with_all(a, b.as_ref())
+    }
+
+    fn _conflicts_with_all(&mut self, a: &dyn AnyArg, b: &[&dyn AnyArg]) -> &mut Self {
+        for &b in b {
+            self.conflicts_with(a, b);
         }
+        self
+    }
+
+    pub fn unallowed(&mut self, a: &dyn AnyArg) -> &mut Self {
+        for k in a.keys() {
+            self.with_error_at(k.span(), "not allowed in this context");
+        }
+        self
+    }
+
+    pub fn finish(&mut self) -> syn::Result<()> {
+        self.spans.clear();
+        self.errors.fail()
     }
 }
 
-impl ValueState {
-    fn from_n(n: usize) -> Self {
-        match n {
-            0 => Self::Empty,
-            1 => Self::Provided,
-            _ => Self::ProvidedMany,
+fn fmt_group<'a>(args: &'a [&dyn AnyArg]) -> impl 'a + fmt::Display {
+    FmtWith(|f| {
+        use fmt::Display;
+        let mut iter = args.iter();
+        if let Some(first) = iter.next() {
+            first.name().fmt(f)?;
         }
-    }
+        for a in iter {
+            f.write_str(" | ")?;
+            a.name().fmt(f)?;
+        }
+        Ok(())
+    })
+}
 
-    fn provided(&self) -> bool {
-        *self as u8 >= Self::Provided as u8
+fn has_any(args: &[&dyn AnyArg]) -> bool {
+    args.iter().any(|a| !a.keys().is_empty())
+}
+
+fn combination<T>(arr: &[T]) -> impl '_ + Iterator<Item = (&'_ T, &'_ T)> {
+    arr.iter()
+        .enumerate()
+        .flat_map(|(k, t1)| arr[(k + 1)..].iter().map(move |t2| (t1, t2)))
+}
+
+struct FmtWith<F>(pub F)
+where
+    F: Fn(&mut fmt::Formatter) -> fmt::Result;
+
+impl<F> fmt::Display for FmtWith<F>
+where
+    F: Fn(&mut fmt::Formatter) -> fmt::Result,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (self.0)(f)
     }
 }

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use plap::ArgParse;
 use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
 
@@ -56,16 +55,4 @@ impl DynParser {
     pub fn parse(&self, input: ParseStream) -> syn::Result<()> {
         (self.0)(input)
     }
-}
-
-pub(crate) struct DynValue;
-
-impl ArgParse for DynValue {
-    type Parser = DynParser;
-
-    fn parse_value(parser: &mut Self::Parser, input: ParseStream) -> syn::Result<Self> {
-        (parser.0)(input).map(|_| DynValue)
-    }
-
-    fn reset(_: &mut Self::Parser) {}
 }

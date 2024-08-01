@@ -1,62 +1,74 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
-
 #[macro_use]
-mod macros;
+mod define_args;
+
 mod arg;
 mod checker;
-mod id;
+mod errors;
 mod parser;
-mod schema;
-mod util;
+#[cfg(feature = "string")]
+mod str;
 
-#[doc(inline)]
-pub use {
-    arg::{Arg, Group},
-    id::{Id, Str},
-    parser::{ArgParse, Parser, SynParser},
-    schema::{ArgKind, ArgSchema, GroupSchema, Schema, SchemaFieldType},
-};
+pub use arg::Arg;
+pub use checker::{AnyArg, Checker};
+pub use define_args::{ArgAttrs, ArgEnum, Args};
+pub use errors::Errors;
+pub use parser::{ArgKind, Parser};
 
-pub trait Args: Sized {
-    fn schema() -> Schema;
-
-    fn init(schema: &Schema) -> Self;
-
-    fn init_parser<'a>(schema: &'a Schema, args: &'a mut Self) -> Parser<'a>;
-
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let schema = Self::schema();
-        let mut args = Self::init(&schema);
-        let mut parser = Self::init_parser(&schema, &mut args);
-        parser.parse(input)?;
-        parser.finish()?;
-        Ok(args)
-    }
-}
-
-/// NON PUBLIC APIS.
+/// **NOT PUBLIC APIS**
 #[doc(hidden)]
 pub mod private {
+    use proc_macro2::Ident;
+    pub use syn;
+
     pub use crate::*;
 
-    /// Helper functions to work with [`Schema`].
-    pub mod schema {
+    pub mod arg {
         use super::*;
 
-        pub fn new<T: SchemaFieldType>() -> T::Schema {
-            T::Schema::default()
+        pub type ParseResult<T> = syn::Result<Result<T, Ident>>;
+        pub type StructParseResult = ParseResult<()>;
+        pub type EnumParseResult<T> = ParseResult<(Ident, T)>;
+
+        pub fn new_attrs() -> ArgAttrs {
+            ArgAttrs::default()
         }
 
-        pub fn register_to<T: SchemaFieldType>(target: &mut Schema, name: Id, schema: T::Schema) {
-            T::register_to(target, name, schema)
+        pub fn parse_key(parser: &mut Parser) -> syn::Result<Ident> {
+            parser.next_key()
         }
 
-        pub fn init_from<T: SchemaFieldType>(schema: &Schema, name: Id) -> T {
-            T::init_from(schema, name)
+        pub fn is_key(key: &Ident, expected: &str) -> bool {
+            key == expected
         }
 
-        pub fn add_to_parser<'a, T: SchemaFieldType>(parser: &mut Parser<'a>, slf: &'a mut T) {
-            T::add_to_parser(parser, slf)
+        pub fn parse_add_value<T>(
+            parser: &mut Parser,
+            attrs: &ArgAttrs,
+            key: Ident,
+            a: &mut Arg<T>,
+        ) -> ParseResult<()>
+        where
+            T: syn::parse::Parse,
+        {
+            a.add(key, parser.next_value(attrs.get_kind())?);
+            Ok(Ok(()))
+        }
+
+        pub fn parse_value_into<T, U>(
+            parser: &mut Parser,
+            attrs: &ArgAttrs,
+            key: Ident,
+            variant: fn(T) -> U,
+        ) -> EnumParseResult<U>
+        where
+            T: syn::parse::Parse,
+        {
+            let value = parser.next_value(attrs.get_kind())?;
+            Ok(Ok((key, variant(value))))
+        }
+
+        pub fn unknown_argument<T>(key: Ident) -> ParseResult<T> {
+            Ok(Err(key))
         }
     }
 }

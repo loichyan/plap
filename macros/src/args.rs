@@ -1,9 +1,9 @@
-use plap_slim::{AnyArg, Arg, ArgAttrs, ArgKind, Args, Checker, Parser};
+use plap::{AnyArg, Arg, ArgAttrs, ArgKind, Args, Checker, Parser};
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Ident, LitBool, Token};
 
-use crate::define_args_slim::{ArgDefs, GroupDef};
+use crate::define_args::{ArgDefs, GroupDef};
 
 pub(crate) fn parse_container_args(
     attrs: &[Attribute],
@@ -63,12 +63,12 @@ macro_rules! define_plap_args {
         #[arg($kind:ident)]
         $f_vis:vis $f_name:ident: $f_ty:ty,
     )*}) => {
-        ::plap_slim::define_args! {
+        ::plap::define_args! {
             $(#[::$attr])*
             $vis struct $name {$(
                 $(#[::$f_attr])*
                 #[arg($kind)]
-                $f_vis $f_name: ::plap_slim::Arg<$f_ty>,
+                $f_vis $f_name: ::plap::Arg<$f_ty>,
             )*}
         }
 
