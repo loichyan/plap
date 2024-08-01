@@ -44,12 +44,12 @@ impl Checker {
         self
     }
 
-    pub fn with_default_span(&mut self, span: Span) -> &mut Self {
+    pub fn with_source(&mut self, span: Span) -> &mut Self {
         self.spans.push(span);
         self
     }
 
-    pub fn with_error_at_default(&mut self, msg: impl fmt::Display + Clone) -> &mut Self {
+    pub fn with_error_at_source(&mut self, msg: impl fmt::Display + Clone) -> &mut Self {
         if self.spans.is_empty() {
             self.errors.add_at(Span::call_site(), msg);
         } else {
@@ -81,7 +81,7 @@ impl Checker {
 
     fn _required_any(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
         if !has_any(args) {
-            self.with_error_at_default(format!("`{}` is required", fmt_group(args)));
+            self.with_error_at_source(format!("`{}` is required", fmt_group(args)));
         }
         self
     }
@@ -103,7 +103,7 @@ impl Checker {
 
     pub fn required(&mut self, arg: &dyn AnyArg) -> &mut Self {
         if arg.keys().is_empty() {
-            self.with_error_at_default(format!("`{}` is required", arg.name()));
+            self.with_error_at_source(format!("`{}` is required", arg.name()));
         }
         self
     }
@@ -201,6 +201,16 @@ impl Checker {
     }
 }
 
+fn has_any(args: &[&dyn AnyArg]) -> bool {
+    args.iter().any(|a| !a.keys().is_empty())
+}
+
+fn combination<T>(arr: &[T]) -> impl '_ + Iterator<Item = (&'_ T, &'_ T)> {
+    arr.iter()
+        .enumerate()
+        .flat_map(|(k, t1)| arr[(k + 1)..].iter().map(move |t2| (t1, t2)))
+}
+
 fn fmt_group<'a>(args: &'a [&dyn AnyArg]) -> impl 'a + fmt::Display {
     FmtWith(|f| {
         use fmt::Display;
@@ -214,16 +224,6 @@ fn fmt_group<'a>(args: &'a [&dyn AnyArg]) -> impl 'a + fmt::Display {
         }
         Ok(())
     })
-}
-
-fn has_any(args: &[&dyn AnyArg]) -> bool {
-    args.iter().any(|a| !a.keys().is_empty())
-}
-
-fn combination<T>(arr: &[T]) -> impl '_ + Iterator<Item = (&'_ T, &'_ T)> {
-    arr.iter()
-        .enumerate()
-        .flat_map(|(k, t1)| arr[(k + 1)..].iter().map(move |t2| (t1, t2)))
 }
 
 struct FmtWith<F>(pub F)

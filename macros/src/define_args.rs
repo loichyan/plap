@@ -166,7 +166,7 @@ impl Checker<'_> {
                 if ident == self.target {
                     let r = attr.parse_args_with(|input: ParseStream| {
                         found_any = true;
-                        self.c.with_default_span(ident.span());
+                        self.c.with_source(ident.span());
                         self.parse_args(input)
                     });
                     self.errors.add_result(r);
