@@ -9,14 +9,15 @@ use crate::args::{CheckArgs, ContainerCheckArgs};
 use crate::dyn_parser::DynParser;
 
 pub fn expand(input: ItemStruct, item: DeriveInput) -> syn::Result<TokenStream> {
-    let c_check = crate::args::parse_container_args(&input.attrs)?;
+    let (groups, check) = crate::args::parse_container_args(&input.attrs)?;
     let mut defs = parse_defs(&input)?;
+    defs.extend(groups.into_iter().map(|(k, v)| (k, Def::Group(v))));
 
     let mut errors = Errors::default();
     Checker {
         c: plap_slim::Checker::default(),
         target: &input.ident,
-        c_check: &c_check,
+        check: &check,
         defs: &mut defs,
         errors: &mut errors,
     }
@@ -32,12 +33,12 @@ fn parse_defs(input: &ItemStruct) -> syn::Result<ArgDefs> {
         let (arg, check) = crate::args::parse_field_args(&field.attrs)?;
         defs.insert(
             name.clone(),
-            ArgDefinition {
+            Def::Arg(ArgDef {
                 i: Arg::from_string(name.to_string()),
                 parser,
                 attrs: arg.build_arg_attrs()?,
                 check,
-            },
+            }),
         );
     }
     Ok(defs)
@@ -85,19 +86,51 @@ fn infer_arg_type(ty: &Type) -> Option<&Ident> {
     }
 }
 
-pub(crate) type ArgDefs = BTreeMap<Ident, ArgDefinition>;
+pub(crate) type ArgDefs = BTreeMap<Ident, Def>;
 
-pub(crate) struct ArgDefinition {
+pub(crate) enum Def {
+    Arg(ArgDef),
+    Group(GroupDef),
+}
+
+pub(crate) struct ArgDef {
     pub i: Arg<Nothing>,
     pub parser: DynParser,
     pub attrs: ArgAttrs,
     pub check: CheckArgs,
 }
 
+pub(crate) struct GroupDef {
+    pub members: Vec<Ident>,
+}
+
+impl Def {
+    pub fn as_arg(&self) -> Option<&ArgDef> {
+        match self {
+            Def::Arg(a) => Some(a),
+            Def::Group(_) => None,
+        }
+    }
+
+    pub fn as_arg_mut(&mut self) -> Option<&mut ArgDef> {
+        match self {
+            Def::Arg(a) => Some(a),
+            Def::Group(_) => None,
+        }
+    }
+
+    pub fn as_group(&self) -> Option<&GroupDef> {
+        match self {
+            Def::Arg(_) => None,
+            Def::Group(g) => Some(g),
+        }
+    }
+}
+
 struct Checker<'a> {
     c: plap_slim::Checker,
     target: &'a Ident,
-    c_check: &'a ContainerCheckArgs,
+    check: &'a ContainerCheckArgs,
     defs: &'a mut ArgDefs,
     errors: &'a mut Errors,
 }
@@ -146,16 +179,20 @@ impl Checker<'_> {
 
         // perform defined checks
         self.errors
-            .add_result(self.c_check.check(&mut self.c, self.defs));
-        for (field, arg) in self.defs.iter() {
-            self.errors
-                .add_result(arg.check.check(&mut self.c, self.defs, field));
+            .add_result(self.check.check(&mut self.c, self.defs));
+        for (field, def) in self.defs.iter() {
+            if let Some(arg) = def.as_arg() {
+                self.errors
+                    .add_result(arg.check.check(&mut self.c, self.defs, field));
+            }
         }
         self.errors.add_result(self.c.finish());
 
         // reset
-        for arg in self.defs.values_mut() {
-            arg.i.clear();
+        for def in self.defs.values_mut() {
+            if let Some(arg) = def.as_arg_mut() {
+                arg.i.clear();
+            }
         }
         Ok(())
     }
@@ -164,7 +201,7 @@ impl Checker<'_> {
         let mut parser = Parser::new(input);
         parser.parse_all_with(|parser| {
             let key = parser.next_key()?;
-            if let Some(arg) = self.defs.get_mut(&key) {
+            if let Some(arg) = self.defs.get_mut(&key).and_then(Def::as_arg_mut) {
                 parser.next_value_with(arg.attrs.get_kind(), |input| arg.parser.parse(input))?;
                 arg.i.add(key, Nothing);
                 Ok(Ok(()))

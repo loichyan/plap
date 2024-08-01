@@ -1,10 +1,11 @@
 #[plap_macros::define_args_slim {
-    #[check(exclusive_group = [arg2, arg5])]
-    #[check(required_any = [arg2, arg5])]
+    #[group(grp1 = [arg2, arg5])]
+    #[group(grp2 = [arg1, arg3])]
+    #[check(exclusive_group = grp1, required_any = grp1)]
     struct my_arg {
         /// Argument #1
         #[arg(is_expr)]
-        #[check(required, exclusive)]
+        #[check(exclusive, required)]
         arg1: Arg<Expr>,
         /// Argument #2
         #[arg(is_flag)]
@@ -15,10 +16,11 @@
         arg3: Arg<Type>,
         /// Argument #4
         #[arg(is_token_tree)]
-        #[check(conflicts_with_all = [arg2, arg5])]
+        #[check(exclusive, conflicts_with_all = grp1)]
         arg4: Arg<Type>,
         /// Argument #5
         #[arg(is_expr)]
+        #[check(exclusive)]
         arg5: Arg<LitInt>,
         /// Show usage
         #[arg(is_help)]

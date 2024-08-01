@@ -1,23 +1,39 @@
-use plap_slim::{AnyArg, Arg, ArgAttrs, Args, Checker, Parser};
-use proc_macro2::Ident;
+use plap_slim::{AnyArg, Arg, ArgAttrs, ArgKind, Args, Checker, Parser};
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
-use syn::{Attribute, LitBool, Token};
+use syn::{Attribute, Ident, LitBool, Token};
 
-use crate::define_args_slim::ArgDefs;
+use crate::define_args_slim::{ArgDefs, GroupDef};
 
-pub(crate) fn parse_container_args(attrs: &[Attribute]) -> syn::Result<ContainerCheckArgs> {
+pub(crate) fn parse_container_args(
+    attrs: &[Attribute],
+) -> syn::Result<(Vec<(Ident, GroupDef)>, ContainerCheckArgs)> {
+    let mut group_defs = Vec::default();
     let mut check_args = ContainerCheckArgs::init();
     for attr in attrs.iter() {
         if let Some(key) = attr.meta.path().get_ident() {
-            if key == "check" {
+            if key == "group" {
+                attr.parse_args_with(|input: ParseStream| {
+                    Parser::new(input).parse_all_with(|parser| {
+                        let name = parser.next_key()?;
+                        let members = parser.next_value::<List<Ident>>(ArgKind::Expr)?;
+                        group_defs.push((
+                            name,
+                            GroupDef {
+                                members: members.elems.into_iter().collect(),
+                            },
+                        ));
+                        Ok(Ok(()))
+                    })
+                })?;
+            } else if key == "check" {
                 attr.parse_args_with(|input: ParseStream| {
                     Parser::new(input).parse_all(&mut check_args)
                 })?;
             }
         }
     }
-    Ok(check_args)
+    Ok((group_defs, check_args))
 }
 
 pub(crate) fn parse_field_args(attrs: &[Attribute]) -> syn::Result<(ArgArgs, CheckArgs)> {
@@ -80,11 +96,11 @@ define_plap_args! {
     #[apply_with(ApplyContainerCheck)]
     pub(crate) struct ContainerCheckArgs {
         #[arg(is_expr)]
-        pub exclusive_group: List<Ident>,
+        pub exclusive_group: MaybeList<Ident>,
         #[arg(is_expr)]
-        pub required_all: List<Ident>,
+        pub required_all: MaybeList<Ident>,
         #[arg(is_expr)]
-        pub required_any: List<Ident>,
+        pub required_any: MaybeList<Ident>,
     }
 }
 
@@ -156,13 +172,13 @@ define_plap_args! {
         #[arg(is_expr)]
         pub requires: Ident,
         #[arg(is_expr)]
-        pub requires_all: List<Ident>,
+        pub requires_all: MaybeList<Ident>,
         #[arg(is_expr)]
-        pub requires_any: List<Ident>,
+        pub requires_any: MaybeList<Ident>,
         #[arg(is_expr)]
         pub conflicts_with: Ident,
         #[arg(is_expr)]
-        pub conflicts_with_all: List<Ident>,
+        pub conflicts_with_all: MaybeList<Ident>,
         #[arg(is_flag)]
         pub unallowed: LitBool,
     }
@@ -248,8 +264,12 @@ impl<'a> ToAnyArg<'a> for Ident {
 
     fn to_any_arg(&self, defs: &'a ArgDefs) -> syn::Result<Self::Type> {
         defs.get(self)
-            .map(|a| &a.i as &dyn AnyArg)
             .ok_or_else(|| syn_error!(self.span(), "undefined argument"))
+            .and_then(|d| {
+                d.as_arg()
+                    .ok_or_else(|| syn_error!(self.span(), "group cannot be used as argument"))
+            })
+            .map(|a| &a.i as &dyn AnyArg)
     }
 }
 
@@ -277,5 +297,40 @@ impl<'a> ToAnyArg<'a> for List<Ident> {
 
     fn to_any_arg(&self, defs: &'a ArgDefs) -> syn::Result<Self::Type> {
         self.elems.iter().map(|i| i.to_any_arg(defs)).collect()
+    }
+}
+
+pub(crate) enum MaybeList<T> {
+    Elem(T),
+    List(List<T>),
+}
+
+impl syn::parse::Parse for MaybeList<Ident> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.peek(Ident) {
+            input.parse().map(Self::Elem)
+        } else if input.peek(syn::token::Bracket) {
+            input.parse().map(Self::List)
+        } else {
+            Err(input.error("expected an identifier or array of identifiers"))
+        }
+    }
+}
+
+impl<'a> ToAnyArg<'a> for MaybeList<Ident> {
+    type Type = Vec<&'a dyn AnyArg>;
+
+    fn to_any_arg(&self, defs: &'a ArgDefs) -> syn::Result<Self::Type> {
+        match self {
+            Self::Elem(i) => defs
+                .get(i)
+                .ok_or_else(|| syn_error!(i.span(), "undefined group"))
+                .and_then(|d| {
+                    d.as_group()
+                        .ok_or_else(|| syn_error!(i.span(), "argument cannot be used as group"))
+                })
+                .and_then(|g| g.members.iter().map(|i| i.to_any_arg(defs)).collect()),
+            Self::List(l) => l.to_any_arg(defs),
+        }
     }
 }
