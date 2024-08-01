@@ -57,4 +57,30 @@ impl<T> Arg<T> {
         self.keys.clear();
         self.values.clear();
     }
+
+    pub fn take_last(mut self) -> Option<T> {
+        self.values.pop()
+    }
+
+    pub fn take_one(mut self) -> T {
+        let val = self
+            .values
+            .pop()
+            .unwrap_or_else(|| panic!("too many values provided"));
+        if !self.values.is_empty() {
+            panic!("too many values provided");
+        }
+        val
+    }
+
+    pub fn take_many(self) -> Vec<T> {
+        if self.values.is_empty() {
+            panic!("too few values provided");
+        }
+        self.values
+    }
+
+    pub fn take_any(self) -> Vec<T> {
+        self.values
+    }
 }
