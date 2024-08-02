@@ -80,7 +80,7 @@ impl Checker {
     }
 
     fn _required_any(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
-        if !has_any(args) {
+        if count_group(args) == 0 {
             self.with_error_at_source(format!("`{}` is required", fmt_group(args)));
         }
         self
@@ -93,6 +93,19 @@ impl Checker {
     fn _exclusive_group(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
         for (&a, &b) in combination(args) {
             self.conflicts_with(a, b);
+        }
+        self
+    }
+
+    pub fn exclusive_aliases<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._exclusive_aliases(args.as_ref())
+    }
+
+    fn _exclusive_aliases(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+        if count_group(args) > 1 {
+            for &arg in args {
+                self._too_many_values(arg);
+            }
         }
         self
     }
@@ -120,13 +133,16 @@ impl Checker {
     }
 
     pub fn exclusive(&mut self, a: &dyn AnyArg) -> &mut Self {
-        let keys = a.keys();
-        if keys.len() > 1 {
-            for k in keys {
-                self.with_error_at(k.span(), "too many values (<= 1)");
-            }
+        if a.keys().len() > 1 {
+            self._too_many_values(a);
         }
         self
+    }
+
+    fn _too_many_values(&mut self, a: &dyn AnyArg) {
+        for k in a.keys() {
+            self.with_error_at(k.span(), "too many values (<= 1)");
+        }
     }
 
     pub fn requires(&mut self, a: &dyn AnyArg, b: &dyn AnyArg) -> &mut Self {
@@ -163,7 +179,7 @@ impl Checker {
     }
 
     fn _requires_any(&mut self, a: &dyn AnyArg, args: &[&dyn AnyArg]) -> &mut Self {
-        if !has_any(args) {
+        if count_group(args) == 0 {
             for k in a.keys() {
                 self.with_error_at(k.span(), format!("requires `{}`", fmt_group(args)));
             }
@@ -211,8 +227,8 @@ impl Checker {
     }
 }
 
-fn has_any(args: &[&dyn AnyArg]) -> bool {
-    args.iter().any(|a| !a.keys().is_empty())
+fn count_group(args: &[&dyn AnyArg]) -> usize {
+    args.iter().map(|a| a.keys().len()).sum()
 }
 
 fn combination<T>(arr: &[T]) -> impl '_ + Iterator<Item = (&'_ T, &'_ T)> {

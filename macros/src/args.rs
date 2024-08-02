@@ -99,6 +99,8 @@ define_plap_args! {
         #[arg(is_expr)]
         pub exclusive_group: MaybeList<Ident>,
         #[arg(is_expr)]
+        pub exclusive_aliases: MaybeList<Ident>,
+        #[arg(is_expr)]
         pub required_all: MaybeList<Ident>,
         #[arg(is_expr)]
         pub required_any: MaybeList<Ident>,
