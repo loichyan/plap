@@ -97,6 +97,17 @@ impl Checker {
         self
     }
 
+    pub fn unallowed_all<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._unallowed_all(args.as_ref())
+    }
+
+    fn _unallowed_all(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+        for &a in args {
+            self.unallowed(a);
+        }
+        self
+    }
+
     /* ------------------ *
      * field level checks *
      * ------------------ */

@@ -101,6 +101,8 @@ define_plap_args! {
         pub required_all: MaybeList<Ident>,
         #[arg(is_expr)]
         pub required_any: MaybeList<Ident>,
+        #[arg(is_expr)]
+        pub unallowed_all: MaybeList<Ident>,
     }
 }
 
