@@ -181,7 +181,7 @@ define_plap_args! {
         #[arg(is_expr)]
         pub conflicts_with: Ident,
         #[arg(is_expr)]
-        pub conflicts_with_all: MaybeList<Ident>,
+        pub conflicts_with_any: MaybeList<Ident>,
         #[arg(is_flag)]
         pub unallowed: LitBool,
     }
