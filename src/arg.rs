@@ -66,7 +66,7 @@ impl<T> Arg<T> {
         let val = self
             .values
             .pop()
-            .unwrap_or_else(|| panic!("too many values provided"));
+            .unwrap_or_else(|| panic!("too few values provided"));
         if !self.values.is_empty() {
             panic!("too many values provided");
         }
