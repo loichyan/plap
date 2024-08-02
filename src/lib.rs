@@ -23,12 +23,12 @@ pub mod private {
     pub use crate::*;
 
     pub mod arg {
-        use proc_macro2::Ident;
+        use proc_macro2::{Ident, Span};
 
         use super::*;
 
-        pub type ParseResult<T> = syn::Result<Result<T, Ident>>;
-        pub type StructParseResult = ParseResult<()>;
+        type ParseResult<T> = syn::Result<Option<T>>;
+        pub type StructParseResult = ParseResult<Span>;
         pub type EnumParseResult<T> = ParseResult<(Ident, T)>;
 
         pub fn new_attrs() -> ArgAttrs {
@@ -36,7 +36,8 @@ pub mod private {
         }
 
         pub fn parse_key(parser: &mut Parser) -> syn::Result<Ident> {
-            parser.next_key()
+            // do not move the cursor unless we find an acknowledged argument
+            parser.peek_key()
         }
 
         pub fn is_key(key: &Ident, expected: &str) -> bool {
@@ -48,12 +49,14 @@ pub mod private {
             attrs: &ArgAttrs,
             key: Ident,
             a: &mut Arg<T>,
-        ) -> ParseResult<()>
+        ) -> StructParseResult
         where
             T: syn::parse::Parse,
         {
+            // now we can move the cursor
+            let span = parser.consume_next()?.unwrap();
             a.add(key, parser.next_value(attrs.get_kind())?);
-            Ok(Ok(()))
+            Ok(Some(span))
         }
 
         pub fn parse_value_into<T, U>(
@@ -65,12 +68,13 @@ pub mod private {
         where
             T: syn::parse::Parse,
         {
+            parser.consume_next()?.unwrap();
             let value = parser.next_value(attrs.get_kind())?;
-            Ok(Ok((key, variant(value))))
+            Ok(Some((key, variant(value))))
         }
 
-        pub fn unknown_argument<T>(key: Ident) -> ParseResult<T> {
-            Ok(Err(key))
+        pub fn unknown_argument<T>(_key: Ident) -> ParseResult<T> {
+            Ok(None)
         }
     }
 }

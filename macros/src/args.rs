@@ -17,13 +17,14 @@ pub(crate) fn parse_container_args(
                     Parser::new(input).parse_all_with(|parser| {
                         let name = parser.next_key()?;
                         let members = parser.next_value::<List<Ident>>(ArgKind::Expr)?;
+                        let span = name.span();
                         group_defs.push((
                             name,
                             GroupDef {
                                 members: members.elems.into_iter().collect(),
                             },
                         ));
-                        Ok(Ok(()))
+                        Ok(Some(span))
                     })
                 })?;
             } else if key == "check" {

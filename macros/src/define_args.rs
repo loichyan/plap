@@ -200,13 +200,14 @@ impl Checker<'_> {
     fn parse_args(&mut self, input: ParseStream) -> syn::Result<()> {
         let mut parser = Parser::new(input);
         parser.parse_all_with(|parser| {
-            let key = parser.next_key()?;
+            let key = parser.peek_key()?;
             if let Some(arg) = self.defs.get_mut(&key).and_then(Def::as_arg_mut) {
+                let span = parser.consume_next()?.unwrap();
                 parser.next_value_with(arg.attrs.get_kind(), |input| arg.parser.parse(input))?;
                 arg.i.add(key, Nothing);
-                Ok(Ok(()))
+                Ok(Some(span))
             } else {
-                Ok(Err(key))
+                Ok(None)
             }
         })
     }

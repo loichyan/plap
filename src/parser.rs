@@ -25,6 +25,14 @@ impl<'a> Parser<'a> {
         Self { input }
     }
 
+    pub fn input(&self) -> ParseStream<'a> {
+        self.input
+    }
+
+    pub fn span(&self) -> Span {
+        self.input.span()
+    }
+
     pub fn is_eof(&self) -> bool {
         self.input.is_empty()
     }
@@ -38,6 +46,14 @@ impl<'a> Parser<'a> {
             Some(i) => Ok(i),
             None => Err(self.input.error("expected an identifier")),
         })
+    }
+
+    pub fn peek_key(&mut self) -> syn::Result<Ident> {
+        self.input
+            .cursor()
+            .ident()
+            .ok_or_else(|| self.input.error("expected an identifier"))
+            .map(|(i, _)| i)
     }
 
     pub fn next_value<T>(&mut self, kind: ArgKind) -> syn::Result<T>
@@ -54,7 +70,7 @@ impl<'a> Parser<'a> {
     ) -> syn::Result<T> {
         let input = self.input;
 
-        let r = match kind {
+        match kind {
             ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     f(input)
@@ -83,34 +99,30 @@ impl<'a> Parser<'a> {
             }
             ArgKind::Help => parse_value_from_str("", f)
                 .map_err(|e| panic!("a help parser must support ``: {}", e)),
-        }?;
+        }
+    }
 
-        if !self.is_eof() && input.parse::<Option<Token![,]>>()?.is_none() {
-            Err(input.error("expected a `,`"))
+    pub fn next_eoa(&mut self) -> syn::Result<Option<Span>> {
+        if let Some(c) = self.input.parse::<Option<Token![,]>>()? {
+            Ok(Some(c.span))
+        } else if self.is_eof() {
+            Ok(None)
         } else {
-            Ok(r)
+            Err(self.input.error("expected a `,`"))
         }
     }
 
     /// Consumes the next token and returns its span. If it reaches
-    /// [`EOA`](Self::is_eoa), [`None`] is returned.
-    ///
-    /// This is typically used to eat unexpected tokens of the current argument
-    /// if an error occurs during parsing.
+    /// [`EOF`](Self::is_eof), [`None`] is returned.
     pub fn consume_next(&mut self) -> syn::Result<Option<Span>> {
-        if self.is_eoa() {
-            Ok(None)
-        } else {
-            self.input
-                .parse::<proc_macro2::TokenTree>()
-                .map(|t| t.span())
-                .map(Some)
-        }
+        self.input
+            .parse::<Option<proc_macro2::TokenTree>>()
+            .map(|t| t.map(|t| t.span()))
     }
 
     pub fn parse_all_with(
         &mut self,
-        mut f: impl FnMut(&mut Self) -> syn::Result<Result<(), Ident>>,
+        mut f: impl FnMut(&mut Self) -> syn::Result<Option<Span>>,
     ) -> syn::Result<()> {
         let mut errors = crate::errors::Errors::default();
         loop {
@@ -119,23 +131,22 @@ impl<'a> Parser<'a> {
             }
 
             match f(self) {
-                Ok(Ok(_)) => continue,
-                Ok(Err(unknown)) => errors.add_at(unknown.span(), "unknown argument"),
-                Err(e) => {
-                    errors.add(e);
-                    // In most cases, the returned error points to the input's
-                    // current span, so we need to skip the current token to
-                    // prevent an "unexpected tokens" error from appearing in
-                    // the same place.
-                    if self.consume_next()?.is_none() {
+                Ok(Some(_)) => {
+                    if errors.add_result(self.next_eoa()).is_some() {
                         continue;
                     }
                 }
+                Ok(None) => errors.add_at(self.span(), "unknown argument"),
+                Err(e) => errors.add(e),
             }
 
             // eat all unexpected tokens
-            while let Some(span) = self.consume_next()? {
-                errors.add_at(span, "unexpected tokens");
+            loop {
+                if self.is_eoa() {
+                    self.consume_next()?;
+                    break;
+                }
+                self.consume_next()?;
             }
         }
         errors.fail()

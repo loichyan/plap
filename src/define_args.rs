@@ -1,4 +1,4 @@
-use proc_macro2::Ident;
+use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
 
 use crate::parser::{ArgKind, Parser};
@@ -34,18 +34,18 @@ macro_rules! define_args {
 
             fn parse_next(
                 &mut self,
-                input: &mut $crate::private::Parser,
+                parser: &mut $crate::private::Parser,
             ) -> $crate::private::arg::StructParseResult {
                 // build argument attributes
                 $(let mut $f_name = $crate::private::arg::new_attrs();
                 $($($crate::private::ArgAttrs::$arg(&mut $f_name, $($arg_val,)*);)*)*)*
 
                 // look for a matched argument,
-                let key = $crate::private::arg::parse_key(input)?;
+                let key = $crate::private::arg::parse_key(parser)?;
                 $(if $crate::private::arg::is_key(&key, stringify!($f_name)) {
                     // and then add its parsed value
                     return $crate::private::arg::parse_add_value(
-                        input, &$f_name, key, &mut self.$f_name
+                        parser, &$f_name, key, &mut self.$f_name
                     );
                 })*
 
@@ -99,17 +99,17 @@ macro_rules! define_args {
 
         impl $crate::private::ArgEnum for $name {
             fn parse_next(
-                input: &mut $crate::private::Parser,
+                parser: &mut $crate::private::Parser,
             ) -> $crate::private::arg::EnumParseResult<$name> {
                 // the parsing process is largely the same as ArgStruct,
                 $(let mut $v_name = $crate::private::arg::new_attrs();
                 $($($crate::private::ArgAttrs::$arg(&mut $v_name, $($arg_val,)*);)*)*)*
 
-                let key = $crate::private::arg::parse_key(input)?;
+                let key = $crate::private::arg::parse_key(parser)?;
                 $(if $crate::private::arg::is_key(&key, stringify!($v_name)) {
                     // except here we return the parsed enum directly
                     return $crate::private::arg::parse_value_into::<_, $name>(
-                        input, &$v_name, key, $name::$v_name
+                        parser, &$v_name, key, $name::$v_name
                     );
                 })*
 
@@ -122,7 +122,7 @@ macro_rules! define_args {
 pub trait Args: Sized {
     fn init() -> Self;
 
-    fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Result<(), Ident>>;
+    fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Option<Span>>;
 
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut new = Self::init();
@@ -136,7 +136,7 @@ pub trait Args: Sized {
 }
 
 pub trait ArgEnum: Sized {
-    fn parse_next(parser: &mut Parser) -> syn::Result<Result<(Ident, Self), Ident>>;
+    fn parse_next(parser: &mut Parser) -> syn::Result<Option<(Ident, Self)>>;
 }
 
 #[derive(Debug, Default)]
