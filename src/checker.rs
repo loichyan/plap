@@ -172,13 +172,12 @@ impl Checker {
     }
 
     pub fn conflicts_with(&mut self, a: &dyn AnyArg, b: &dyn AnyArg) -> &mut Self {
-        let (a_name, a_keys) = (a.name(), a.keys());
-        let (b_name, b_keys) = (b.name(), b.keys());
-        for a in a_keys {
+        let b_keys = b.keys();
+        for a in a.keys() {
             for b in b_keys {
                 // conflicts are always bidirectional
-                self.with_error_at(a.span(), format!("conflicts with `{}`", b_name));
-                self.with_error_at(b.span(), format!("conflicts with `{}`", a_name));
+                self.with_error_at(a.span(), format!("conflicts with `{}`", b));
+                self.with_error_at(b.span(), format!("conflicts with `{}`", a));
             }
         }
         self
