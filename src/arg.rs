@@ -84,3 +84,13 @@ impl<T> Arg<T> {
         self.values
     }
 }
+
+impl Arg<syn::LitBool> {
+    pub fn take_flag(self) -> bool {
+        self.take_flag_or(false)
+    }
+
+    pub fn take_flag_or(self, default: bool) -> bool {
+        self.take_last().map(|b| b.value()).unwrap_or(default)
+    }
+}
