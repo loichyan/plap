@@ -6,6 +6,8 @@ mod define_args;
 #[cfg(feature = "checking")]
 mod checker;
 mod errors;
+#[macro_use]
+mod group;
 mod parser;
 #[cfg(feature = "string")]
 mod str;
