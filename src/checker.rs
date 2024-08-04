@@ -140,16 +140,16 @@ impl Checker {
     }
 
     fn _too_many_values(&mut self, a: &dyn AnyArg) {
-        for k in a.keys() {
-            self.with_error_at(k.span(), "too many values (<= 1)");
+        for a in a.keys() {
+            self.with_error_at(a.span(), format!("`{}` has too many values (<= 1)", a));
         }
     }
 
     pub fn requires(&mut self, a: &dyn AnyArg, b: &dyn AnyArg) -> &mut Self {
         if b.keys().is_empty() {
             let b_name = b.name();
-            for k in a.keys() {
-                self.with_error_at(k.span(), format!("requires `{}`", b_name));
+            for a in a.keys() {
+                self.with_error_at(a.span(), format!("`{}` requires `{}`", a, b_name));
             }
         }
         self
@@ -180,8 +180,8 @@ impl Checker {
 
     fn _requires_any(&mut self, a: &dyn AnyArg, args: &[&dyn AnyArg]) -> &mut Self {
         if count_group(args) == 0 {
-            for k in a.keys() {
-                self.with_error_at(k.span(), format!("requires `{}`", fmt_group(args)));
+            for a in a.keys() {
+                self.with_error_at(a.span(), format!("`{}` requires `{}`", a, fmt_group(args)));
             }
         }
         self
@@ -192,8 +192,8 @@ impl Checker {
         for a in a.keys() {
             for b in b_keys {
                 // conflicts are always bidirectional
-                self.with_error_at(a.span(), format!("conflicts with `{}`", b));
-                self.with_error_at(b.span(), format!("conflicts with `{}`", a));
+                self.with_error_at(a.span(), format!("`{}` conflicts with `{}`", a, b));
+                self.with_error_at(b.span(), format!("`{}` conflicts with `{}`", b, a));
             }
         }
         self
@@ -215,8 +215,8 @@ impl Checker {
     }
 
     pub fn unallowed(&mut self, a: &dyn AnyArg) -> &mut Self {
-        for k in a.keys() {
-            self.with_error_at(k.span(), "not allowed in this context");
+        for a in a.keys() {
+            self.with_error_at(a.span(), format!("`{}` is not allowed in this context", a));
         }
         self
     }
