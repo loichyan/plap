@@ -16,7 +16,9 @@ pub(crate) fn parse_container_args(
                 attr.parse_args_with(|input: ParseStream| {
                     Parser::new(input).parse_all_with(|parser| {
                         let name = parser.next_key()?;
-                        let members = parser.next_value::<List<Ident>>(ArgKind::Expr)?;
+                        let mut attrs = ArgAttrs::default();
+                        attrs.kind(ArgKind::Expr);
+                        let members = parser.next_value::<List<Ident>>(&attrs)?;
                         let span = name.span();
                         group_defs.push((
                             name,
@@ -143,6 +145,8 @@ define_plap_args! {
         pub is_token_tree: LitBool,
         #[arg(is_flag)]
         pub is_help: LitBool,
+        #[arg(is_flag)]
+        pub optional: LitBool,
     }
 }
 

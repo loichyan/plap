@@ -1,7 +1,27 @@
 use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
 
-use crate::parser::{ArgKind, Parser};
+use crate::parser::Parser;
+
+pub trait Args: Sized {
+    fn init() -> Self;
+
+    fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Option<Span>>;
+
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut new = Self::init();
+        Parser::new(input).parse_all(&mut new)?;
+        Ok(new)
+    }
+
+    #[cfg(feature = "checking")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "checking")))]
+    fn check(&self, checker: &mut crate::checker::Checker);
+}
+
+pub trait ArgEnum: Sized {
+    fn parse_next(parser: &mut Parser) -> syn::Result<Option<(Ident, Self)>>;
+}
 
 #[macro_export]
 macro_rules! define_args {
@@ -117,56 +137,4 @@ macro_rules! define_args {
             }
         }
     };
-}
-
-pub trait Args: Sized {
-    fn init() -> Self;
-
-    fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Option<Span>>;
-
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut new = Self::init();
-        Parser::new(input).parse_all(&mut new)?;
-        Ok(new)
-    }
-
-    #[cfg(feature = "checking")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "checking")))]
-    fn check(&self, checker: &mut crate::checker::Checker);
-}
-
-pub trait ArgEnum: Sized {
-    fn parse_next(parser: &mut Parser) -> syn::Result<Option<(Ident, Self)>>;
-}
-
-#[derive(Debug, Default)]
-pub struct ArgAttrs {
-    kind: ArgKind,
-}
-
-impl ArgAttrs {
-    pub fn kind(&mut self, kind: ArgKind) -> &mut Self {
-        self.kind = kind;
-        self
-    }
-
-    pub fn is_expr(&mut self) -> &mut Self {
-        self.kind(ArgKind::Expr)
-    }
-
-    pub fn is_flag(&mut self) -> &mut Self {
-        self.kind(ArgKind::Flag)
-    }
-
-    pub fn is_token_tree(&mut self) -> &mut Self {
-        self.kind(ArgKind::TokenTree)
-    }
-
-    pub fn is_help(&mut self) -> &mut Self {
-        self.kind(ArgKind::Help)
-    }
-
-    pub fn get_kind(&self) -> ArgKind {
-        self.kind
-    }
 }

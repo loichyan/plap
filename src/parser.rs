@@ -1,20 +1,8 @@
 use proc_macro2::{Ident, Span};
-use syn::parse::ParseStream;
+use syn::parse::{Parse, ParseStream};
 use syn::{parenthesized, LitStr, Token};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ArgKind {
-    Expr,
-    Flag,
-    TokenTree,
-    Help,
-}
-
-impl Default for ArgKind {
-    fn default() -> Self {
-        ArgKind::TokenTree
-    }
-}
+use crate::arg::{ArgAttrs, ArgKind};
 
 pub struct Parser<'a> {
     input: ParseStream<'a>,
@@ -33,12 +21,12 @@ impl<'a> Parser<'a> {
         self.input.span()
     }
 
-    pub fn is_eof(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.input.is_empty()
     }
 
     pub fn is_eoa(&self) -> bool {
-        self.input.peek(Token![,]) || self.is_eof()
+        self.input.peek(Token![,]) || self.input.is_empty()
     }
 
     pub fn next_key(&mut self) -> syn::Result<Ident> {
@@ -56,31 +44,38 @@ impl<'a> Parser<'a> {
             .map(|(i, _)| i)
     }
 
-    pub fn next_value<T>(&mut self, kind: ArgKind) -> syn::Result<T>
-    where
-        T: syn::parse::Parse,
-    {
-        self.next_value_with(kind, T::parse)
+    pub fn next_value<T: Parse>(&mut self, attrs: &ArgAttrs) -> syn::Result<T> {
+        self.next_value_with(attrs, T::parse)
     }
 
     pub fn next_value_with<T>(
         &mut self,
-        kind: ArgKind,
+        attrs: &ArgAttrs,
         f: impl FnOnce(ParseStream) -> syn::Result<T>,
     ) -> syn::Result<T> {
         let input = self.input;
+        let kind = attrs.get_kind();
+
+        if self.is_eoa() {
+            match kind {
+                ArgKind::Expr | ArgKind::TokenTree => {
+                    if attrs.get_optional() {
+                        return parse_value_from_str("", f);
+                    }
+                }
+                ArgKind::Flag => return parse_value_from_str("true", f),
+                _ => {}
+            }
+        }
 
         match kind {
             ArgKind::Expr | ArgKind::Flag => {
-                if input.parse::<Option<Token![=]>>()?.is_some() {
+                if input.parse::<Option<Token![=]>>()?.is_some() && !self.is_eoa() {
                     f(input)
                 } else if input.peek(syn::token::Paren) {
                     let content;
                     parenthesized!(content in input);
                     f(&content)
-                } else if kind == ArgKind::Flag && self.is_eoa() {
-                    parse_value_from_str("true", f)
-                        .map_err(|e| panic!("a flag parser must support `true`: {}", e))
                 } else {
                     Err(input.error("expected `= <value>` or `(<value>)`"))
                 }
@@ -97,15 +92,14 @@ impl<'a> Parser<'a> {
                     Err(input.error("expected `= \"<value>\"` or `(<value>)`"))
                 }
             }
-            ArgKind::Help => parse_value_from_str("", f)
-                .map_err(|e| panic!("a help parser must support ``: {}", e)),
+            ArgKind::Help => parse_value_from_str("", f),
         }
     }
 
     pub fn next_eoa(&mut self) -> syn::Result<Option<Span>> {
         if let Some(c) = self.input.parse::<Option<Token![,]>>()? {
             Ok(Some(c.span))
-        } else if self.is_eof() {
+        } else if self.is_empty() {
             Ok(None)
         } else {
             Err(self.input.error("expected a `,`"))
@@ -126,7 +120,7 @@ impl<'a> Parser<'a> {
     ) -> syn::Result<()> {
         let mut errors = crate::errors::Errors::default();
         loop {
-            if self.is_eof() {
+            if self.is_empty() {
                 break;
             }
 
@@ -173,4 +167,17 @@ fn parse_value_from_literal<T>(
     f: impl FnOnce(ParseStream) -> syn::Result<T>,
 ) -> syn::Result<T> {
     input.parse_with(|input: ParseStream| f(input))
+}
+
+#[derive(Debug)]
+pub struct Optional<T>(pub Option<T>);
+
+impl<T: Parse> Parse for Optional<T> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.is_empty() {
+            Ok(Self(None))
+        } else {
+            input.parse().map(Some).map(Self)
+        }
+    }
 }

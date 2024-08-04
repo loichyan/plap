@@ -1,5 +1,61 @@
 use proc_macro2::Ident;
 
+#[derive(Debug, Default)]
+pub struct ArgAttrs {
+    kind: ArgKind,
+    optional: bool,
+}
+
+impl ArgAttrs {
+    pub fn kind(&mut self, kind: ArgKind) -> &mut Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn is_expr(&mut self) -> &mut Self {
+        self.kind(ArgKind::Expr)
+    }
+
+    pub fn is_flag(&mut self) -> &mut Self {
+        self.kind(ArgKind::Flag)
+    }
+
+    pub fn is_token_tree(&mut self) -> &mut Self {
+        self.kind(ArgKind::TokenTree)
+    }
+
+    pub fn is_help(&mut self) -> &mut Self {
+        self.kind(ArgKind::Help)
+    }
+
+    pub fn optional(&mut self) -> &mut Self {
+        self.optional = true;
+        self
+    }
+
+    pub fn get_kind(&self) -> ArgKind {
+        self.kind
+    }
+
+    pub fn get_optional(&self) -> bool {
+        self.optional
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ArgKind {
+    Expr,
+    Flag,
+    TokenTree,
+    Help,
+}
+
+impl Default for ArgKind {
+    fn default() -> Self {
+        ArgKind::TokenTree
+    }
+}
+
 #[derive(Debug)]
 pub struct Arg<T> {
     #[cfg(feature = "string")]

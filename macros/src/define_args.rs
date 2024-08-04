@@ -203,7 +203,7 @@ impl Checker<'_> {
             let key = parser.peek_key()?;
             if let Some(arg) = self.defs.get_mut(&key).and_then(Def::as_arg_mut) {
                 let span = parser.consume_next()?.unwrap();
-                parser.next_value_with(arg.attrs.get_kind(), |input| arg.parser.parse(input))?;
+                parser.next_value_with(&arg.attrs, |input| arg.parser.parse(input))?;
                 arg.i.add(key, Nothing);
                 Ok(Some(span))
             } else {

@@ -19,18 +19,17 @@
         #[check(exclusive, conflicts_with_any = grp1)]
         arg4: Arg<Type>,
         /// Argument #5
-        #[arg(is_expr)]
-        #[check(exclusive)]
-        arg5: Arg<LitInt>,
+        #[arg(is_expr, optional)]
+        arg5: Arg<OptionalLitInt>,
         /// Show usage
         #[arg(is_help)]
         help: Arg<Nothing>,
     }
 }]
 struct UserInput {
-    #[my_arg(arg1 = "value #1", arg5 = 1)]
+    #[my_arg(arg1 = "value #1", arg5 = 1, arg5, arg5)]
     some_field: String,
-    #[my_arg(arg1 = "value #2", arg2 = false)]
+    #[my_arg(arg1 = "value #2", arg2)]
     #[my_arg(arg3 = "Vec<String>")]
     another_field: i32,
 }

@@ -12,12 +12,14 @@ mod parser;
 #[cfg(feature = "string")]
 mod str;
 
-pub use arg::Arg;
+pub use arg::{Arg, ArgAttrs, ArgKind};
 #[cfg(feature = "checking")]
 pub use checker::{AnyArg, Checker};
-pub use define_args::{ArgAttrs, ArgEnum, Args};
+pub use define_args::{ArgEnum, Args};
 pub use errors::Errors;
-pub use parser::{ArgKind, Parser};
+pub use parser::{Optional, Parser};
+
+pub type OptionalArg<T> = Arg<Optional<T>>;
 
 /// **NOT PUBLIC APIS**
 #[doc(hidden)]
@@ -57,7 +59,7 @@ pub mod private {
         {
             // now we can move the cursor
             let span = parser.consume_next()?.unwrap();
-            a.add(key, parser.next_value(attrs.get_kind())?);
+            a.add(key, parser.next_value(attrs)?);
             Ok(Some(span))
         }
 
@@ -71,7 +73,7 @@ pub mod private {
             T: syn::parse::Parse,
         {
             parser.consume_next()?.unwrap();
-            let value = parser.next_value(attrs.get_kind())?;
+            let value = parser.next_value(attrs)?;
             Ok(Some((key, variant(value))))
         }
 
