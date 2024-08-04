@@ -107,7 +107,7 @@ define_plap_args! {
         #[arg(is_expr)]
         pub required_any: MaybeList<Ident>,
         #[arg(is_expr)]
-        pub unallowed_all: MaybeList<Ident>,
+        pub blocked_all: MaybeList<Ident>,
     }
 }
 
@@ -189,7 +189,7 @@ define_plap_args! {
         #[arg(is_expr)]
         pub conflicts_with_any: MaybeList<Ident>,
         #[arg(is_flag)]
-        pub unallowed: LitBool,
+        pub blocked: LitBool,
     }
 }
 

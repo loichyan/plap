@@ -110,13 +110,13 @@ impl Checker {
         self
     }
 
-    pub fn unallowed_all<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
-        self._unallowed_all(args.as_ref())
+    pub fn blocked_all<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._blocked_all(args.as_ref())
     }
 
-    fn _unallowed_all(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+    fn _blocked_all(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
         for &a in args {
-            self.unallowed(a);
+            self.blocked(a);
         }
         self
     }
@@ -214,7 +214,7 @@ impl Checker {
         self
     }
 
-    pub fn unallowed(&mut self, a: &dyn AnyArg) -> &mut Self {
+    pub fn blocked(&mut self, a: &dyn AnyArg) -> &mut Self {
         for a in a.keys() {
             self.with_error_at(a.span(), format!("`{}` is not allowed in this context", a));
         }
