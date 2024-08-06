@@ -1,3 +1,5 @@
+use std::fmt;
+
 use proc_macro2::{Ident, Span};
 use syn::parse::{Parse, ParseStream};
 use syn::{parenthesized, LitStr, Token};
@@ -169,8 +171,13 @@ fn parse_value_from_literal<T>(
     input.parse_with(|input: ParseStream| f(input))
 }
 
-#[derive(Debug)]
 pub struct Optional<T>(pub Option<T>);
+
+impl<T: fmt::Debug> fmt::Debug for Optional<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl<T: Parse> Parse for Optional<T> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
