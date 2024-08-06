@@ -21,7 +21,7 @@ define_args! {
         arg3: Arg<Type>,
         /// Argument #4
         #[arg(is_token_tree)]
-        #[check(exclusive, conflicts_with_any = grp1)]
+        #[check(exclusive, conflicts_with_each = grp1)]
         arg4: Arg<Type>,
         /// Argument #5
         #[arg(is_expr)]

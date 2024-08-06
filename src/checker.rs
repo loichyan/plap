@@ -199,15 +199,15 @@ impl Checker {
         self
     }
 
-    pub fn conflicts_with_any<'b>(
+    pub fn conflicts_with_each<'b>(
         &mut self,
         a: &dyn AnyArg,
         b: impl AsRef<[&'b dyn AnyArg]>,
     ) -> &mut Self {
-        self._conflicts_with_any(a, b.as_ref())
+        self._conflicts_with_each(a, b.as_ref())
     }
 
-    fn _conflicts_with_any(&mut self, a: &dyn AnyArg, b: &[&dyn AnyArg]) -> &mut Self {
+    fn _conflicts_with_each(&mut self, a: &dyn AnyArg, b: &[&dyn AnyArg]) -> &mut Self {
         for &b in b {
             self.conflicts_with(a, b);
         }
