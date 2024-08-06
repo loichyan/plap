@@ -96,6 +96,14 @@ impl<T> Arg<T> {
         return self.name;
     }
 
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn keys(&self) -> &[Ident] {
         &self.keys
     }
