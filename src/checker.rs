@@ -64,11 +64,11 @@ impl Checker {
      * container level checks *
      * ---------------------- */
 
-    pub fn required_all<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
-        self._required_all(args.as_ref())
+    pub fn required_each<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._required_each(args.as_ref())
     }
 
-    fn _required_all(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+    fn _required_each(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
         for &a in args {
             self.required(a);
         }
@@ -110,11 +110,11 @@ impl Checker {
         self
     }
 
-    pub fn blocked_all<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
-        self._blocked_all(args.as_ref())
+    pub fn blocked_each<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
+        self._blocked_each(args.as_ref())
     }
 
-    fn _blocked_all(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
+    fn _blocked_each(&mut self, args: &[&dyn AnyArg]) -> &mut Self {
         for &a in args {
             self.blocked(a);
         }
@@ -155,15 +155,15 @@ impl Checker {
         self
     }
 
-    pub fn requires_all<'b>(
+    pub fn requires_each<'b>(
         &mut self,
         a: &dyn AnyArg,
         b: impl AsRef<[&'b dyn AnyArg]>,
     ) -> &mut Self {
-        self._requires_all(a, b.as_ref())
+        self._requires_each(a, b.as_ref())
     }
 
-    fn _requires_all(&mut self, a: &dyn AnyArg, b: &[&dyn AnyArg]) -> &mut Self {
+    fn _requires_each(&mut self, a: &dyn AnyArg, b: &[&dyn AnyArg]) -> &mut Self {
         for &b in b {
             self.requires(a, b);
         }

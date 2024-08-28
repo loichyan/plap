@@ -103,11 +103,11 @@ define_plap_args! {
         #[arg(is_expr)]
         pub exclusive_aliases: MaybeList<Ident>,
         #[arg(is_expr)]
-        pub required_all: MaybeList<Ident>,
+        pub required_each: MaybeList<Ident>,
         #[arg(is_expr)]
         pub required_any: MaybeList<Ident>,
         #[arg(is_expr)]
-        pub blocked_all: MaybeList<Ident>,
+        pub blocked_each: MaybeList<Ident>,
     }
 }
 
@@ -181,7 +181,7 @@ define_plap_args! {
         #[arg(is_expr)]
         pub requires: Ident,
         #[arg(is_expr)]
-        pub requires_all: MaybeList<Ident>,
+        pub requires_each: MaybeList<Ident>,
         #[arg(is_expr)]
         pub requires_any: MaybeList<Ident>,
         #[arg(is_expr)]
