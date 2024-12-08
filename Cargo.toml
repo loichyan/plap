@@ -16,7 +16,6 @@ repository = "https://github.com/loichyan/plap"
 
 [features]
 default = []
-checking = []
 string = []
 
 [dependencies]
@@ -25,10 +24,6 @@ syn = { version = "2.0", default-features = false, features = ["parsing"] }
 
 [dev-dependencies]
 plap-macros = { path = "macros" }
-quote = { version = "1.0", default-features = false }
-syn = { version = "2.0", default-features = false, features = [
-    "extra-traits",
-    "full",
-    "parsing",
-] }
+quote = { version = "1.0" }
+syn = { version = "2.0", features = ["extra-traits"] }
 trybuild = "1.0"

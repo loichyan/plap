@@ -11,9 +11,8 @@ _default:
     @command {{ _just }} --list
 
 check:
-    $CARGO clippy --all --features=checking
+    $CARGO clippy --all --no-default-features
     $CARGO clippy --all --features=string
-    $CARGO clippy --all --features=checking,string
 
 check-fmt:
     $CARGO fmt --check

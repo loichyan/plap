@@ -3,7 +3,6 @@
 mod arg;
 #[macro_use]
 mod define_args;
-#[cfg(feature = "checking")]
 mod checker;
 mod errors;
 #[macro_use]
@@ -13,7 +12,6 @@ mod parser;
 mod str;
 
 pub use arg::{Arg, ArgAttrs, ArgKind};
-#[cfg(feature = "checking")]
 pub use checker::{AnyArg, Checker};
 pub use define_args::{ArgEnum, Args};
 pub use errors::Errors;
@@ -81,20 +79,4 @@ pub mod private {
             Ok(None)
         }
     }
-}
-
-/// **NOT PUBLIC APIS**
-#[cfg(feature = "checking")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! private {
-    (@cfg(feature = "checking") $($tt:tt)*) => { $($tt)* };
-}
-
-/// **NOT PUBLIC APIS**
-#[cfg(not(feature = "checking"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! private {
-    (@cfg(feature = "checking") $($tt:tt)*) => {};
 }
