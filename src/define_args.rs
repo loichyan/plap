@@ -22,23 +22,63 @@ pub trait ArgEnum: Sized {
 
 #[macro_export]
 macro_rules! define_args {
-    ($(#[doc = $doc:literal])*
-    $(#[::$attr:meta])*
-    $(#[group($($group:ident = $group_val:expr),* $(,)?)])*
-    $(#[check($($check:ident $(= $check_val:expr)?),* $(,)?)])*
-    $vis:vis struct $name:ident {$(
-        $(#[doc = $f_doc:literal])*
-        $(#[::$f_attr:meta])*
-        $(#[arg($($arg:ident $(= $arg_val:expr)?),* $(,)?)])*
-        $(#[check($($f_check:ident $(= $f_check_val:expr)?),* $(,)?)])*
-        $f_vis:vis $f_name:ident: $f_ty:ty,
-    )*}) => {
-        $(#[doc = $doc])*
+    ($($tt:tt)*) => {
+        $crate::__define_args_impl!(@head=[] check=[] group=[] $($tt)*);
+    }
+}
+
+/// NON-PUBLIC API
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __define_args_impl {
+    // Extract `#[group]` and `#[check]` attributes from the header
+    (@head=$h:tt check=$c:tt group=[$($g:tt)*] #[group$group:tt] $($rest:tt)*) => {
+        $crate::__define_args_impl!(@head=$h check=$c group=[$($g)* $group] $($rest)*);
+    };
+    (@head=$h:tt check=[$($c:tt)*] group=$g:tt #[check$check:tt] $($rest:tt)*) => {
+        $crate::__define_args_impl!(@head=$h check=[$($c)* $check] group=$g $($rest)*);
+    };
+    (@head=[$($h:tt)*] check=$c:tt group=$g:tt #[$attr:meta] $($rest:tt)*) => {
+        $crate::__define_args_impl!(@head=[$($h)* #[$attr]] check=$c group=$g $($rest)*);
+    };
+    (@head=[$($h:tt)*] check=$c:tt group=$g:tt $vis:vis $ty:ident $name:ident { $($body:tt)* }) => {
+        $crate::__define_args_impl!(@body=[$ty $($h)* @check=$c @group=$g $vis $name] arg=[] check=[] $($body)*);
+    };
+    // Extract `#[arg]` attributes from fields/variants
+    (@body=$b:tt arg=[$($a:tt)*] check=$c:tt #[arg$arg:tt] $($rest:tt)*) => {
+        $crate::__define_args_impl!(@body=$b arg=[$($a)* $arg] check=$c $($rest)*);
+    };
+    (@body=$b:tt arg=$a:tt check=[$($c:tt)*] #[check$check:tt] $($rest:tt)*) => {
+        $crate::__define_args_impl!(@body=$b arg=$a check=[$($c)* $check] $($rest)*);
+    };
+    (@body=[$($b:tt)*] arg=$a:tt check=$c:tt #[$attr:meta] $($rest:tt)*) => {
+        $crate::__define_args_impl!(@body=[$($b)* #[$attr]] arg=$a check=$c $($rest)*);
+    };
+    (@body=[$($b:tt)*] arg=$a:tt check=$c:tt $vis:vis $name:ident: $ty:ty, $($rest:tt)*) => {
+        $crate::__define_args_impl!(@body=[$($b)* @arg=$a @check=$c $vis $name: $ty,] arg=[] check=[] $($rest)*);
+    };
+    (@body=[$($b:tt)*] arg=$a:tt check=$c:tt $name:ident($ty:ty), $($rest:tt)*) => {
+        $crate::__define_args_impl!(@body=[$($b)* @arg=$a @check=$c $name($ty),] arg=[] check=[] $($rest)*);
+    };
+    (@body=[$($b:tt)*] arg=$_a:tt check=$_c:tt $(,)?) => {
+        $crate::__define_args_impl!(@$($b)*);
+    };
+    // Generate implementations for structs
+    (@struct
+        $(#[$attr:meta])*
+        @check=[$(($($check:ident $(= $check_val:expr)?),* $(,)?))*]
+        @group=[$(($($group:ident = $group_val:expr),* $(,)?))*]
+        $vis:vis $name:ident
+        $(
+            $(#[$f_attr:meta])*
+            @arg=[$(($($arg:ident $(= $arg_val:expr)?),* $(,)?))*]
+            @check=[$(($($f_check:ident $(= $f_check_val:expr)?),* $(,)?))*]
+            $f_vis:vis $f_name:ident: $f_ty:ty,
+        )*
+    ) => {
         $(#[$attr])*
         $vis struct $name {$(
-            $(#[doc = $f_doc])*
-            $(#[$f_attr])*
-            $f_vis $f_name: $f_ty,
+            $(#[$f_attr])* $f_vis $f_name: $f_ty,
         )*}
 
         #[allow(unused_variables)]
@@ -95,21 +135,23 @@ macro_rules! define_args {
             }
         }
     };
-    ($(#[doc = $doc:literal])*
-    $(#[::$attr:meta])*
-    $vis:vis enum $name:ident {$(
-        $(#[doc = $v_doc:literal])*
-        $(#[::$v_attr:meta])*
-        $(#[arg($($arg:ident $(= $arg_val:expr)?),* $(,)?)])*
-        $v_name:ident($v_ty:ty),
-    )*}) => {
-        $(#[doc = $doc])*
+    // Generate implementations for enums
+    (@enum
+        $(#[$attr:meta])*
+        @check=$_c:tt
+        @group=$_g:tt
+        $vis:vis $name:ident
+        $(
+            $(#[$v_attr:meta])*
+            @arg=[$(($($arg:ident $(= $arg_val:expr)?),* $(,)?))*]
+            @check=$_vc:tt
+            $v_name:ident($v_ty:ty),
+        )*
+    ) => {
         $(#[$attr])*
         #[allow(non_camel_case_types)]
         $vis enum $name {$(
-            $(#[doc = $v_doc])*
-            $(#[$v_attr])*
-            $v_name($v_ty),
+            $(#[$v_attr])* $v_name($v_ty),
         )*}
 
         impl $crate::private::ArgEnum for $name {

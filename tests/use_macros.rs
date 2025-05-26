@@ -3,7 +3,7 @@ use syn::parse::Nothing;
 use syn::{Expr, LitBool, LitInt, Type};
 
 define_args! {
-    #[::derive(Debug)]
+    #[derive(Debug)]
     #[group(grp1 = [arg2, arg5])]
     #[group(grp2 = [arg1, arg3])]
     #[check(exclusive_group = grp1, required_any = grp1)]
@@ -34,7 +34,7 @@ define_args! {
 }
 
 define_args! {
-    #[::derive(Debug)]
+    #[derive(Debug)]
     pub enum MyArgEnum {
         /// Argument #1
         #[arg(is_expr)]
