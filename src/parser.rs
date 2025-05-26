@@ -1,10 +1,8 @@
-use std::fmt;
-
+use crate::arg::{ArgAttrs, ArgKind};
 use proc_macro2::{Ident, Span};
+use std::fmt;
 use syn::parse::{Parse, ParseStream};
 use syn::{parenthesized, LitStr, Token};
-
-use crate::arg::{ArgAttrs, ArgKind};
 
 pub struct Parser<'a> {
     input: ParseStream<'a>,
@@ -64,9 +62,9 @@ impl<'a> Parser<'a> {
                     if attrs.get_optional() {
                         return parse_value_from_str("", f);
                     }
-                }
+                },
                 ArgKind::Flag => return parse_value_from_str("true", f),
-                _ => {}
+                _ => {},
             }
         }
 
@@ -81,7 +79,7 @@ impl<'a> Parser<'a> {
                 } else {
                     Err(input.error("expected `= <value>` or `(<value>)`"))
                 }
-            }
+            },
             ArgKind::TokenTree => {
                 if input.parse::<Option<Token![=]>>()?.is_some() {
                     let content = input.parse::<syn::LitStr>()?;
@@ -93,7 +91,7 @@ impl<'a> Parser<'a> {
                 } else {
                     Err(input.error("expected `= \"<value>\"` or `(<value>)`"))
                 }
-            }
+            },
             ArgKind::Help => parse_value_from_str("", f),
         }
     }
@@ -131,7 +129,7 @@ impl<'a> Parser<'a> {
                     if errors.add_result(self.next_eoa()).is_some() {
                         continue;
                     }
-                }
+                },
                 Ok(None) => errors.add_at(self.span(), "unknown argument"),
                 Err(e) => errors.add(e),
             }

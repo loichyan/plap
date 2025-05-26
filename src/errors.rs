@@ -1,6 +1,5 @@
-use std::fmt;
-
 use proc_macro2::Span;
+use std::fmt;
 
 #[derive(Debug, Default)]
 pub struct Errors {
@@ -22,7 +21,7 @@ impl Errors {
             Err(e) => {
                 self.add(e);
                 None
-            }
+            },
         }
     }
 

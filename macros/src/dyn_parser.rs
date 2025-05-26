@@ -1,6 +1,5 @@
-use std::collections::BTreeMap;
-
 use proc_macro2::{Ident, Span};
+use std::collections::BTreeMap;
 use syn::parse::{Parse, ParseStream};
 
 type DynParserMap = BTreeMap<Ident, fn() -> DynParser>;

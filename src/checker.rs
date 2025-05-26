@@ -1,8 +1,6 @@
-use std::fmt;
-
-use proc_macro2::{Ident, Span};
-
 use crate::errors::Errors;
+use proc_macro2::{Ident, Span};
+use std::fmt;
 
 pub trait AnyArg {
     fn name(&self) -> &str;
@@ -58,9 +56,9 @@ impl Checker {
         self
     }
 
-    /* ---------------------- *
-     * container level checks *
-     * ---------------------- */
+    // ---------------------- *
+    // container level checks *
+    // ----------------------
 
     pub fn required_each<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
         self._required_each(args.as_ref())
@@ -119,9 +117,9 @@ impl Checker {
         self
     }
 
-    /* ------------------ *
-     * field level checks *
-     * ------------------ */
+    // ------------------ *
+    // field level checks *
+    // ------------------
 
     pub fn required(&mut self, arg: &dyn AnyArg) -> &mut Self {
         if arg.keys().is_empty() {

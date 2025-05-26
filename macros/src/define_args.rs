@@ -1,12 +1,10 @@
-use std::collections::BTreeMap;
-
-use plap::{Arg, ArgAttrs, Errors, Parser};
-use proc_macro2::{Ident, Span, TokenStream};
-use syn::parse::{Nothing, ParseStream};
-use syn::{Attribute, Data, DeriveInput, Field, GenericArgument, ItemStruct, PathArguments, Type};
-
 use crate::args::{CheckArgs, ContainerCheckArgs};
 use crate::dyn_parser::DynParser;
+use plap::{Arg, ArgAttrs, Errors, Parser};
+use proc_macro2::{Ident, Span, TokenStream};
+use std::collections::BTreeMap;
+use syn::parse::{Nothing, ParseStream};
+use syn::{Attribute, Data, DeriveInput, Field, GenericArgument, ItemStruct, PathArguments, Type};
 
 pub fn expand(input: ItemStruct, item: DeriveInput) -> syn::Result<TokenStream> {
     let (groups, check) = crate::args::parse_container_args(&input.attrs)?;
@@ -81,7 +79,7 @@ fn infer_arg_type(ty: &Type) -> Option<&Ident> {
             } else {
                 None
             }
-        }
+        },
         _ => None,
     }
 }
@@ -144,7 +142,7 @@ impl Checker<'_> {
                     self.check_attrs(&variant.attrs)?;
                     self.check_fields(variant.fields.iter())?
                 }
-            }
+            },
             Data::Struct(s) => self.check_fields(s.fields.iter())?,
             Data::Union(u) => self.check_fields(u.fields.named.iter())?,
         }

@@ -25,9 +25,8 @@ pub mod private {
     pub use crate::*;
 
     pub mod arg {
-        use proc_macro2::{Ident, Span};
-
         use super::*;
+        use proc_macro2::{Ident, Span};
 
         type ParseResult<T> = syn::Result<Option<T>>;
         pub type StructParseResult = ParseResult<Span>;

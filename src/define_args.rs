@@ -1,7 +1,6 @@
+use crate::parser::Parser;
 use proc_macro2::{Ident, Span};
 use syn::parse::ParseStream;
-
-use crate::parser::Parser;
 
 pub trait Args: Sized {
     fn init() -> Self;

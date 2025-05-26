@@ -1,9 +1,8 @@
+use crate::define_args::{ArgDefs, GroupDef};
 use plap::{AnyArg, Arg, ArgAttrs, ArgKind, Args, Checker, Parser};
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Ident, LitBool, Token};
-
-use crate::define_args::{ArgDefs, GroupDef};
 
 pub(crate) fn parse_container_args(
     attrs: &[Attribute],
@@ -20,12 +19,9 @@ pub(crate) fn parse_container_args(
                         attrs.kind(ArgKind::Expr);
                         let members = parser.next_value::<List<Ident>>(&attrs)?;
                         let span = name.span();
-                        group_defs.push((
-                            name,
-                            GroupDef {
-                                members: members.elems.into_iter().collect(),
-                            },
-                        ));
+                        group_defs.push((name, GroupDef {
+                            members: members.elems.into_iter().collect(),
+                        }));
                         Ok(Some(span))
                     })
                 })?;
