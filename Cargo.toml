@@ -10,8 +10,8 @@ edition = "2021"
 rust-version = "1.56"
 
 description = "An argument parser for proc-macros"
-keywords = []
-categories = []
+categories = ["development-tools::procedural-macro-helpers"]
+keywords = ["macros"]
 repository = "https://github.com/loichyan/plap"
 
 [features]
