@@ -1,2 +1,5 @@
 [toolchain]
-channel = "1.56"
+# The channel used to develop this crate.
+# It differs from the MSRV since many development dependencies require a newer
+# version of Rust, while we still aim to support older versions.
+channel = "1.75"

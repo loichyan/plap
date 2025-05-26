@@ -1,43 +1,58 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    fenix = {
-      url = "github:nix-community/fenix";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs =
-    { nixpkgs, flake-utils, ... }@inputs:
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+    }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ inputs.fenix.overlays.default ];
+          overlays = [ rust-overlay.overlays.default ];
         };
-        inherit (pkgs) fenix lib;
+        inherit (pkgs) lib mkShellNoCC rust-bin;
 
-        # Rust toolchain
-        rustToolchainFile = lib.importTOML ./rust-toolchain.toml;
-        rustChannel = {
-          channel = rustToolchainFile.toolchain.channel;
-          sha256 = "sha256-MJyH6FPVI7diJql9d+pifu5aoqejvvXyJ+6WSJDWaIA=";
+        rustupToolchain = (lib.importTOML ./rust-toolchain.toml).toolchain;
+        crateMetadata = (lib.importTOML ./Cargo.toml).package;
+
+        # Rust toolchain for development
+        rust-dev = rust-bin.fromRustupToolchain rustupToolchain;
+        rust-dev-with-rust-analyzer = rust-dev.override (prev: {
+          extensions = prev.extensions ++ [
+            "rust-src"
+            "rust-analyzer"
+          ];
+        });
+
+        # Rust toolchain of MSRV
+        rust-msrv = rust-bin.fromRustupToolchain {
+          channel = crateMetadata.rust-version;
+          profile = "minimal";
         };
-        rustToolchain = fenix.toolchainOf rustChannel;
 
-        # For development
-        rust-dev = fenix.combine (
-          with rustToolchain;
-          [
-            defaultToolchain
-            rust-src
-          ]
-        );
+        mkDevShell =
+          devPkgs:
+          (mkShellNoCC {
+            packages = devPkgs;
+          });
       in
       {
-        devShells.default = with pkgs; mkShell { packages = [ rust-dev ]; };
+        # The default devShell with IDE integrations
+        devShells.default = mkDevShell [ rust-dev-with-rust-analyzer ];
+        # A minimal devShell with toolchain of MSRV
+        devShells.msrv = mkDevShell [ rust-msrv ];
       }
     );
 }
