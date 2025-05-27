@@ -43,12 +43,13 @@ pub trait ArgEnum: Sized {
 }
 
 #[derive(Debug, Default)]
-pub struct ArgAttrs {
-    kind: ArgKind,
-    optional: bool,
+#[non_exhaustive]
+pub struct ArgDesc {
+    pub kind: ArgKind,
+    pub optional: bool,
 }
 
-impl ArgAttrs {
+impl ArgDesc {
     pub fn new() -> Self {
         Self::default()
     }
@@ -77,14 +78,6 @@ impl ArgAttrs {
     pub fn optional(&mut self) -> &mut Self {
         self.optional = true;
         self
-    }
-
-    pub fn get_kind(&self) -> ArgKind {
-        self.kind
-    }
-
-    pub fn get_optional(&self) -> bool {
-        self.optional
     }
 }
 

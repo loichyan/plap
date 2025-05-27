@@ -1,4 +1,4 @@
-use crate::arg::{ArgAttrs, ArgKind};
+use crate::arg::{ArgDesc, ArgKind};
 use proc_macro2::{Ident, Span};
 use std::fmt;
 use syn::parse::{Parse, ParseStream};
@@ -44,22 +44,21 @@ impl<'a> Parser<'a> {
             .map(|(i, _)| i)
     }
 
-    pub fn next_value<T: Parse>(&mut self, attrs: &ArgAttrs) -> syn::Result<T> {
-        self.next_value_with(attrs, T::parse)
+    pub fn next_value<T: Parse>(&mut self, arg: &ArgDesc) -> syn::Result<T> {
+        self.next_value_with(arg, T::parse)
     }
 
     pub fn next_value_with<T>(
         &mut self,
-        attrs: &ArgAttrs,
+        arg: &ArgDesc,
         f: impl FnOnce(ParseStream) -> syn::Result<T>,
     ) -> syn::Result<T> {
         let input = self.input;
-        let kind = attrs.get_kind();
 
         if self.is_eoa() {
-            match kind {
+            match arg.kind {
                 ArgKind::Expr | ArgKind::TokenTree => {
-                    if attrs.get_optional() {
+                    if arg.optional {
                         return parse_value_from_str("", f);
                     }
                 },
@@ -68,7 +67,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        match kind {
+        match arg.kind {
             ArgKind::Expr | ArgKind::Flag => {
                 if input.parse::<Option<Token![=]>>()?.is_some() && !self.is_eoa() {
                     f(input)

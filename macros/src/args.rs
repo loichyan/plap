@@ -1,5 +1,5 @@
 use crate::define_args::{ArgDefs, GroupDef};
-use plap::{AnyArg, Arg, ArgAttrs, ArgKind, Args, Checker, Parser};
+use plap::{AnyArg, Arg, ArgDesc, ArgKind, Args, Checker, Parser};
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Ident, LitBool, Token};
@@ -15,7 +15,7 @@ pub(crate) fn parse_container_args(
                 attr.parse_args_with(|input: ParseStream| {
                     Parser::new(input).parse_all_with(|parser| {
                         let name = parser.next_key()?;
-                        let mut attrs = ArgAttrs::default();
+                        let mut attrs = ArgDesc::default();
                         attrs.kind(ArgKind::Expr);
                         let members = parser.next_value::<List<Ident>>(&attrs)?;
                         let span = name.span();
@@ -150,7 +150,7 @@ define_plap_args! {
 mod ApplyArg {
     use super::*;
 
-    pub(super) type Target = ArgAttrs;
+    pub(super) type Target = ArgDesc;
     pub(super) type Context = ();
 
     pub(super) fn apply_flag_to(
@@ -245,8 +245,8 @@ impl ContainerCheckArgs {
 }
 
 impl ArgArgs {
-    pub fn build_arg_attrs(self) -> syn::Result<ArgAttrs> {
-        let mut attrs = ArgAttrs::default();
+    pub fn build_arg_attrs(self) -> syn::Result<ArgDesc> {
+        let mut attrs = ArgDesc::default();
         self._apply_to(&mut attrs, &())?;
         Ok(attrs)
     }

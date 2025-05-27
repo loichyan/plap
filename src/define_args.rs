@@ -71,9 +71,9 @@ macro_rules! __define_args_impl {
                 &mut self,
                 parser: &mut $crate::r#priv::Parser,
             ) -> $crate::r#priv::StructParseResult {
-                // Build argument attributes
-                $(let mut $f_name = $crate::r#priv::ArgAttrs::new();
-                $($($crate::r#priv::ArgAttrs::$arg(&mut $f_name, $($arg_val,)*);)*)*)*
+                // Build argument descriptions
+                $(let mut $f_name = $crate::r#priv::ArgDesc::new();
+                $($($crate::r#priv::ArgDesc::$arg(&mut $f_name, $($arg_val,)*);)*)*)*
 
                 // Look for a matched argument,
                 let key = parser.peek_key()?;
@@ -143,8 +143,8 @@ macro_rules! __define_args_impl {
                 parser: &mut $crate::r#priv::Parser,
             ) -> $crate::r#priv::EnumParseResult<$name> {
                 // The parsing process is almost the same as ArgStruct,
-                $(let mut $v_name = $crate::r#priv::ArgAttrs::new();
-                $($($crate::r#priv::ArgAttrs::$arg(&mut $v_name, $($arg_val,)*);)*)*)*
+                $(let mut $v_name = $crate::r#priv::ArgDesc::new();
+                $($($crate::r#priv::ArgDesc::$arg(&mut $v_name, $($arg_val,)*);)*)*)*
 
                 let key = parser.peek_key()?;
                 $(if &key == stringify!($v_name) {

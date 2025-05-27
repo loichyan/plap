@@ -47,7 +47,7 @@ thread_local! {
     };
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) struct DynParser(fn(ParseStream) -> syn::Result<()>);
 
 impl DynParser {

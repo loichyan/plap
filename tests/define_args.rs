@@ -1,3 +1,4 @@
+// TODO: use build script to simplify the testing
 #[plap_macros::define_args {
     #[group(grp1 = [arg2, arg5])]
     #[group(grp2 = [arg1, arg3])]

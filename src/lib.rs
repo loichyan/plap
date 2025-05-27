@@ -9,7 +9,7 @@ mod parser;
 #[cfg(feature = "string")]
 mod str;
 
-pub use arg::{Arg, ArgAttrs, ArgEnum, ArgKind, Args};
+pub use arg::{Arg, ArgDesc, ArgEnum, ArgKind, Args};
 pub use checker::{AnyArg, Checker};
 pub use error::{Error, Errors};
 pub use parser::{Optional, Parser};
@@ -28,7 +28,7 @@ pub mod r#priv {
 
     pub fn parse_args<T>(
         parser: &mut Parser,
-        attrs: &ArgAttrs,
+        attrs: &ArgDesc,
         key: Ident,
         args: &mut Arg<T>,
     ) -> StructParseResult
@@ -43,7 +43,7 @@ pub mod r#priv {
 
     pub fn parse_args_enum<T, U>(
         parser: &mut Parser,
-        attrs: &ArgAttrs,
+        attrs: &ArgDesc,
         key: Ident,
         variant: fn(T) -> U,
     ) -> EnumParseResult<U>

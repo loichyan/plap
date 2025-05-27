@@ -1,6 +1,6 @@
 use crate::args::{CheckArgs, ContainerCheckArgs};
 use crate::dyn_parser::DynParser;
-use plap::{Arg, ArgAttrs, Errors, Parser};
+use plap::{Arg, ArgDesc, Errors, Parser};
 use proc_macro2::{Ident, Span, TokenStream};
 use std::collections::BTreeMap;
 use syn::parse::{Nothing, ParseStream};
@@ -94,7 +94,7 @@ pub(crate) enum Def {
 pub(crate) struct ArgDef {
     pub i: Arg<Nothing>,
     pub parser: DynParser,
-    pub attrs: ArgAttrs,
+    pub attrs: ArgDesc,
     pub check: CheckArgs,
 }
 
