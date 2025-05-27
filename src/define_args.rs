@@ -1,39 +1,3 @@
-use crate::parser::Parser;
-use proc_macro2::{Ident, Span};
-use syn::parse::ParseStream;
-
-pub trait Args: Sized {
-    fn init() -> Self;
-
-    fn parse_next(&mut self, parser: &mut Parser) -> crate::Result<Span>;
-
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut new = Self::init();
-        Parser::new(input).parse_all(&mut new)?;
-        Ok(new)
-    }
-
-    fn check(&self, checker: &mut crate::checker::Checker);
-}
-
-pub trait ArgEnum: Sized {
-    fn name(&self) -> &'static str;
-
-    fn parse_next(parser: &mut Parser) -> crate::Result<(Ident, Self)>;
-
-    fn parse(input: ParseStream) -> syn::Result<Vec<(Ident, Self)>> {
-        let mut args = Vec::new();
-        Parser::new(input).parse_all_with(|parser| {
-            Self::parse_next(parser).map(|(i, a)| {
-                let span = i.span();
-                args.push((i, a));
-                span
-            })
-        })?;
-        Ok(args)
-    }
-}
-
 #[macro_export]
 macro_rules! define_args {
     ($($tt:tt)*) => {
@@ -124,7 +88,7 @@ macro_rules! __define_args_impl {
                 return $crate::r#priv::unknown_argument(key);
             }
 
-            fn check(
+            fn check_with(
                 &self,
                 checker: &mut $crate::r#priv::Checker,
             ) {

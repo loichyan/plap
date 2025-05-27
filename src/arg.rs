@@ -1,4 +1,46 @@
-use proc_macro2::Ident;
+use crate::checker::Checker;
+use crate::parser::Parser;
+use proc_macro2::{Ident, Span};
+use syn::parse::ParseStream;
+
+pub trait Args: Sized {
+    fn init() -> Self;
+
+    fn parse_next(&mut self, parser: &mut Parser) -> crate::Result<Span>;
+
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut new = Self::init();
+        Parser::new(input).parse_all(&mut new)?;
+        Ok(new)
+    }
+
+    fn check_with(&self, checker: &mut Checker);
+
+    fn check(self) -> syn::Result<Self> {
+        let mut checker = Checker::new();
+        self.check_with(&mut checker);
+        checker.finish()?;
+        Ok(self)
+    }
+}
+
+pub trait ArgEnum: Sized {
+    fn name(&self) -> &'static str;
+
+    fn parse_next(parser: &mut Parser) -> crate::Result<(Ident, Self)>;
+
+    fn parse(input: ParseStream) -> syn::Result<Vec<(Ident, Self)>> {
+        let mut args = Vec::new();
+        Parser::new(input).parse_all_with(|parser| {
+            Self::parse_next(parser).map(|(i, a)| {
+                let span = i.span();
+                args.push((i, a));
+                span
+            })
+        })?;
+        Ok(args)
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct ArgAttrs {

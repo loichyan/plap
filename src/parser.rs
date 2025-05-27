@@ -147,7 +147,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_all<A>(&mut self, args: &mut A) -> syn::Result<()>
     where
-        A: crate::define_args::Args,
+        A: crate::arg::Args,
     {
         self.parse_all_with(|parser| A::parse_next(args, parser))
     }

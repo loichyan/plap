@@ -25,6 +25,10 @@ pub struct Checker {
 }
 
 impl Checker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn with_result(&mut self, res: syn::Result<()>) -> &mut Self {
         self.errors.add_result(res);
         self

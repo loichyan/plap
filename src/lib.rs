@@ -9,9 +9,8 @@ mod parser;
 #[cfg(feature = "string")]
 mod str;
 
-pub use arg::{Arg, ArgAttrs, ArgKind};
+pub use arg::{Arg, ArgAttrs, ArgEnum, ArgKind, Args};
 pub use checker::{AnyArg, Checker};
-pub use define_args::{ArgEnum, Args};
 pub use error::{Error, Errors};
 pub use parser::{Optional, Parser};
 
