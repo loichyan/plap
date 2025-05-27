@@ -116,22 +116,21 @@ impl<'a> Parser<'a> {
 
     pub fn parse_all_with(
         &mut self,
-        mut f: impl FnMut(&mut Self) -> syn::Result<Option<Span>>,
+        mut f: impl FnMut(&mut Self) -> crate::Result<Span>,
     ) -> syn::Result<()> {
-        let mut errors = crate::errors::Errors::default();
+        let mut errors = crate::error::Errors::default();
         loop {
             if self.is_empty() {
                 break;
             }
 
             match f(self) {
-                Ok(Some(_)) => {
+                Ok(_) => {
                     if errors.add_result(self.next_eoa()).is_some() {
                         continue;
                     }
                 },
-                Ok(None) => errors.add_at(self.span(), "unknown argument"),
-                Err(e) => errors.add(e),
+                Err(e) => errors.add(e.into_syn()),
             }
 
             // eat all unexpected tokens

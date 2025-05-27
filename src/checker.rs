@@ -1,4 +1,4 @@
-use crate::errors::Errors;
+use crate::error::Errors;
 use proc_macro2::{Ident, Span};
 use std::fmt;
 

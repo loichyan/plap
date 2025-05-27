@@ -22,7 +22,7 @@ pub(crate) fn parse_container_args(
                         group_defs.push((name, GroupDef {
                             members: members.elems.into_iter().collect(),
                         }));
-                        Ok(Some(span))
+                        Ok(span)
                     })
                 })?;
             } else if key == "check" {

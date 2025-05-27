@@ -4,7 +4,7 @@ mod arg;
 mod checker;
 #[macro_use]
 mod define_args;
-mod errors;
+mod error;
 mod parser;
 #[cfg(feature = "string")]
 mod str;
@@ -12,9 +12,10 @@ mod str;
 pub use arg::{Arg, ArgAttrs, ArgKind};
 pub use checker::{AnyArg, Checker};
 pub use define_args::{ArgEnum, Args};
-pub use errors::Errors;
+pub use error::{Error, Errors};
 pub use parser::{Optional, Parser};
 
+pub type Result<T, E = error::Error> = std::result::Result<T, E>;
 pub type OptionalArg<T> = Arg<Optional<T>>;
 
 /// **NOT PUBLIC APIS**
@@ -26,9 +27,8 @@ pub mod private {
         use super::*;
         use proc_macro2::{Ident, Span};
 
-        type ParseResult<T> = syn::Result<Option<T>>;
-        pub type StructParseResult = ParseResult<Span>;
-        pub type EnumParseResult<T> = ParseResult<(Ident, T)>;
+        pub type StructParseResult = crate::Result<Span>;
+        pub type EnumParseResult<T> = crate::Result<(Ident, T)>;
 
         pub fn new_attrs() -> ArgAttrs {
             ArgAttrs::default()
@@ -55,7 +55,7 @@ pub mod private {
             // now we can move the cursor
             let span = parser.consume_next()?.unwrap();
             a.add(key, parser.next_value(attrs)?);
-            Ok(Some(span))
+            Ok(span)
         }
 
         pub fn parse_value_into<T, U>(
@@ -69,11 +69,11 @@ pub mod private {
         {
             parser.consume_next()?.unwrap();
             let value = parser.next_value(attrs)?;
-            Ok(Some((key, variant(value))))
+            Ok((key, variant(value)))
         }
 
-        pub fn unknown_argument<T>(_key: Ident) -> ParseResult<T> {
-            Ok(None)
+        pub fn unknown_argument<T>(key: Ident) -> crate::Result<T> {
+            Err(crate::Error::UnknownArgument(key))
         }
     }
 }

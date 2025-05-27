@@ -203,9 +203,9 @@ impl Checker<'_> {
                 let span = parser.consume_next()?.unwrap();
                 parser.next_value_with(&arg.attrs, |input| arg.parser.parse(input))?;
                 arg.i.add(key, Nothing);
-                Ok(Some(span))
+                Ok(span)
             } else {
-                Ok(None)
+                Err(plap::Error::UnknownArgument(key))
             }
         })
     }

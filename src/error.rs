@@ -1,5 +1,32 @@
-use proc_macro2::Span;
+use proc_macro2::{Ident, Span};
 use std::fmt;
+
+#[non_exhaustive]
+pub enum Error {
+    BadSyntax(syn::Error),
+    UnknownArgument(Ident),
+}
+
+impl Error {
+    pub fn into_syn(self) -> syn::Error {
+        match self {
+            Self::BadSyntax(e) => e,
+            Self::UnknownArgument(i) => syn::Error::new(i.span(), "unknown argument"),
+        }
+    }
+}
+
+impl From<syn::Error> for Error {
+    fn from(value: syn::Error) -> Self {
+        Error::BadSyntax(value)
+    }
+}
+
+impl From<Error> for syn::Error {
+    fn from(value: Error) -> Self {
+        value.into_syn()
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct Errors {

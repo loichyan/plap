@@ -5,8 +5,7 @@ use syn::parse::ParseStream;
 pub trait Args: Sized {
     fn init() -> Self;
 
-    // TODO: use our error type
-    fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Option<Span>>;
+    fn parse_next(&mut self, parser: &mut Parser) -> crate::Result<Span>;
 
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut new = Self::init();
@@ -20,17 +19,15 @@ pub trait Args: Sized {
 pub trait ArgEnum: Sized {
     fn name(&self) -> &'static str;
 
-    fn parse_next(parser: &mut Parser) -> syn::Result<Option<(Ident, Self)>>;
+    fn parse_next(parser: &mut Parser) -> crate::Result<(Ident, Self)>;
 
     fn parse(input: ParseStream) -> syn::Result<Vec<(Ident, Self)>> {
         let mut args = Vec::new();
         Parser::new(input).parse_all_with(|parser| {
-            Self::parse_next(parser).map(|o| {
-                o.map(|(i, a)| {
-                    let span = i.span();
-                    args.push((i, a));
-                    span
-                })
+            Self::parse_next(parser).map(|(i, a)| {
+                let span = i.span();
+                args.push((i, a));
+                span
             })
         })?;
         Ok(args)
@@ -110,20 +107,20 @@ macro_rules! __define_args_impl {
                 &mut self,
                 parser: &mut $crate::private::Parser,
             ) -> $crate::private::arg::StructParseResult {
-                // build argument attributes
+                // Build argument attributes
                 $(let mut $f_name = $crate::private::arg::new_attrs();
                 $($($crate::private::ArgAttrs::$arg(&mut $f_name, $($arg_val,)*);)*)*)*
 
-                // look for a matched argument,
+                // Look for a matched argument,
                 let key = $crate::private::arg::parse_key(parser)?;
                 $(if $crate::private::arg::is_key(&key, stringify!($f_name)) {
-                    // and then add its parsed value
+                    // and then add its parsed value.
                     return $crate::private::arg::parse_add_value(
                         parser, &$f_name, key, &mut self.$f_name
                     );
                 })*
 
-                // if no match, we return the parsed key as an Err
+                // Return the parsed key as an Err if no match
                 return $crate::private::arg::unknown_argument(key);
             }
 
@@ -131,19 +128,19 @@ macro_rules! __define_args_impl {
                 &self,
                 checker: &mut $crate::private::Checker,
             ) {
-                // generate argument variables, which can be referred in #[check(...)]
+                // Generate argument variables, which can be referred in #[check(...)]
                 $(let $f_name: &dyn $crate::private::AnyArg = &self.$f_name;)*
 
-                // generate group variables
+                // Generate group variables
                 $($(let $group: &[&dyn $crate::private::AnyArg] = &$group_val;)*)*
 
-                // add container level checks, including groups, requirements, etc
+                // Add container level checks, including groups, requirements, etc
                 $($($crate::private::Checker::$check(
                     checker,
                     $($check_val,)*
                 );)*)*
 
-                // add field level checks, where the field is passed as the first parameter
+                // Add field level checks, where the field is passed as the first parameter
                 $($($($crate::private::Checker::$f_check(
                     checker,
                     $f_name,
@@ -181,13 +178,13 @@ macro_rules! __define_args_impl {
             fn parse_next(
                 parser: &mut $crate::private::Parser,
             ) -> $crate::private::arg::EnumParseResult<$name> {
-                // the parsing process is largely the same as ArgStruct,
+                // The parsing process is almost the same as ArgStruct,
                 $(let mut $v_name = $crate::private::arg::new_attrs();
                 $($($crate::private::ArgAttrs::$arg(&mut $v_name, $($arg_val,)*);)*)*)*
 
                 let key = $crate::private::arg::parse_key(parser)?;
                 $(if $crate::private::arg::is_key(&key, stringify!($v_name)) {
-                    // except here we return the parsed enum directly
+                    // except here we return the parsed enum directly.
                     return $crate::private::arg::parse_value_into::<_, $name>(
                         parser, &$v_name, key, $name::$v_name
                     );
