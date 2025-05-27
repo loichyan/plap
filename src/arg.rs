@@ -168,39 +168,41 @@ impl<T> Arg<T> {
         self.values.clear();
     }
 
-    pub fn take_last(mut self) -> Option<T> {
+    pub fn take_last(&mut self) -> Option<T> {
         self.values.pop()
     }
 
-    pub fn take_one(mut self) -> T {
-        let val = self
-            .values
-            .pop()
-            .unwrap_or_else(|| panic!("too few values provided"));
+    pub fn take_one(&mut self) -> T {
+        self.take_optional()
+            .unwrap_or_else(|| panic!("too few values provided"))
+    }
+
+    pub fn take_optional(&mut self) -> Option<T> {
+        let val = self.values.pop()?;
         if !self.values.is_empty() {
             panic!("too many values provided");
         }
-        val
+        Some(val)
     }
 
-    pub fn take_many(self) -> Vec<T> {
+    pub fn take_many(&mut self) -> Vec<T> {
         if self.values.is_empty() {
             panic!("too few values provided");
         }
-        self.values
+        self.take_any()
     }
 
-    pub fn take_any(self) -> Vec<T> {
-        self.values
+    pub fn take_any(&mut self) -> Vec<T> {
+        std::mem::take(&mut self.values)
     }
 }
 
 impl Arg<syn::LitBool> {
-    pub fn take_flag(self) -> bool {
+    pub fn take_flag(&mut self) -> bool {
         self.take_flag_or(false)
     }
 
-    pub fn take_flag_or(self, default: bool) -> bool {
-        self.take_last().map(|b| b.value()).unwrap_or(default)
+    pub fn take_flag_or(&mut self, default: bool) -> bool {
+        self.take_optional().map(|b| b.value()).unwrap_or(default)
     }
 }
