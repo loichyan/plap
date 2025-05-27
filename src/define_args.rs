@@ -5,6 +5,7 @@ use syn::parse::ParseStream;
 pub trait Args: Sized {
     fn init() -> Self;
 
+    // TODO: use our error type
     fn parse_next(&mut self, parser: &mut Parser) -> syn::Result<Option<Span>>;
 
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -17,7 +18,23 @@ pub trait Args: Sized {
 }
 
 pub trait ArgEnum: Sized {
+    fn name(&self) -> &'static str;
+
     fn parse_next(parser: &mut Parser) -> syn::Result<Option<(Ident, Self)>>;
+
+    fn parse(input: ParseStream) -> syn::Result<Vec<(Ident, Self)>> {
+        let mut args = Vec::new();
+        Parser::new(input).parse_all_with(|parser| {
+            Self::parse_next(parser).map(|o| {
+                o.map(|(i, a)| {
+                    let span = i.span();
+                    args.push((i, a));
+                    span
+                })
+            })
+        })?;
+        Ok(args)
+    }
 }
 
 #[macro_export]
@@ -155,6 +172,12 @@ macro_rules! __define_args_impl {
         )*}
 
         impl $crate::private::ArgEnum for $name {
+            fn name(&self) -> &'static str {
+                match self {$(
+                    $name::$v_name(_) => stringify!($v_name),
+                )*}
+            }
+
             fn parse_next(
                 parser: &mut $crate::private::Parser,
             ) -> $crate::private::arg::EnumParseResult<$name> {

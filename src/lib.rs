@@ -1,12 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod arg;
+mod checker;
 #[macro_use]
 mod define_args;
-mod checker;
 mod errors;
-#[macro_use]
-mod group;
 mod parser;
 #[cfg(feature = "string")]
 mod str;
