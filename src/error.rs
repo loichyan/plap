@@ -34,6 +34,8 @@ pub struct Errors {
 }
 
 impl Errors {
+    // TODO: pub fn new()
+
     pub fn add(&mut self, err: syn::Error) {
         if let Some(e) = &mut self.e {
             e.combine(err);
@@ -56,6 +58,7 @@ impl Errors {
         self.add(syn::Error::new(span, msg))
     }
 
+    // TODO: fail() -> Result<()>
     pub fn fail<T>(&mut self) -> syn::Result<T>
     where
         T: Default,

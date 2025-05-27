@@ -82,10 +82,12 @@ impl ArgDesc {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+// TODO: non_exhaustive
 pub enum ArgKind {
     Expr,
     Flag,
     TokenTree,
+    // TODO: nolonger needed
     Help,
 }
 

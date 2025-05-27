@@ -1,0 +1,19 @@
+[package]
+name = "plap-compile-tests"
+version = "0.0.0"
+publish = false
+authors = ["Loi Chyan <loichyan@foxmail.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+rust-version = "1.56"
+
+description = "Compilation tests for plap"
+repository = "https://github.com/loichyan/plap"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+plap = { path = ".." }
+proc-macro2 = "1.0"
+syn = { version = "2.0", features = ["full"] }

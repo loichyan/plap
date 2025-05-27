@@ -1,5 +1,5 @@
-/*!include ```
-plap::define_args {
+/*!include
+define_args! {
    #[group(grp1 = [arg2, arg5])]
    #[group(grp2 = [arg1, arg3])]
    #[check(exclusive_group = grp1, required_any = grp1)]
@@ -21,42 +21,15 @@ plap::define_args {
        arg4: Arg<Type>,
        /// Argument #5
        #[arg(is_expr, optional)]
-       arg5: Arg<OptionalLitInt>,
+       arg5: Arg<Optional<LitInt>>,
        /// Show usage
        #[arg(is_help)]
        help: Arg<Nothing>,
    }
 }
-``` endinclude!*/
+endinclude!*/
 
-#[plap_macros::define_args {
-    #[group(grp1 = [arg2, arg5])]
-    #[group(grp2 = [arg1, arg3])]
-    #[check(exclusive_group = grp1, required_any = grp1)]
-    struct my_arg {
-        /// Argument #1
-        #[arg(is_expr)]
-        #[check(exclusive, required)]
-        arg1: Arg<Expr>,
-        /// Argument #2
-        #[arg(is_flag)]
-        #[check(exclusive, requires = arg3)]
-        arg2: Arg<LitBool>,
-        /// Argument #3
-        #[arg(is_token_tree)]
-        arg3: Arg<Type>,
-        /// Argument #4
-        #[arg(is_token_tree)]
-        #[check(exclusive, conflicts_with_each = grp1)]
-        arg4: Arg<Type>,
-        /// Argument #5
-        #[arg(is_expr, optional)]
-        arg5: Arg<OptionalLitInt>,
-        /// Show usage
-        #[arg(is_help)]
-        help: Arg<Nothing>,
-    }
-}]
+#[plap_compile_tests::test(my_arg)]
 struct UserInput {
     #[my_arg(arg1 = "value #1", arg5 = 1, arg5, arg5)]
     some_field: String,
