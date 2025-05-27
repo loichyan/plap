@@ -7,6 +7,10 @@ pub struct ArgAttrs {
 }
 
 impl ArgAttrs {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn kind(&mut self, kind: ArgKind) -> &mut Self {
         self.kind = kind;
         self

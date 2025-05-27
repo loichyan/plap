@@ -96,52 +96,52 @@ macro_rules! __define_args_impl {
         )*}
 
         #[allow(unused_variables)]
-        impl $crate::private::Args for $name {
+        impl $crate::r#priv::Args for $name {
             fn init() -> $name {
                 $name {$(
-                    $f_name: $crate::private::Arg::new(stringify!($f_name)),
+                    $f_name: $crate::r#priv::Arg::new(stringify!($f_name)),
                 )*}
             }
 
             fn parse_next(
                 &mut self,
-                parser: &mut $crate::private::Parser,
-            ) -> $crate::private::arg::StructParseResult {
+                parser: &mut $crate::r#priv::Parser,
+            ) -> $crate::r#priv::StructParseResult {
                 // Build argument attributes
-                $(let mut $f_name = $crate::private::arg::new_attrs();
-                $($($crate::private::ArgAttrs::$arg(&mut $f_name, $($arg_val,)*);)*)*)*
+                $(let mut $f_name = $crate::r#priv::ArgAttrs::new();
+                $($($crate::r#priv::ArgAttrs::$arg(&mut $f_name, $($arg_val,)*);)*)*)*
 
                 // Look for a matched argument,
-                let key = $crate::private::arg::parse_key(parser)?;
-                $(if $crate::private::arg::is_key(&key, stringify!($f_name)) {
+                let key = parser.peek_key()?;
+                $(if &key == stringify!($f_name) {
                     // and then add its parsed value.
-                    return $crate::private::arg::parse_add_value(
+                    return $crate::r#priv::parse_args(
                         parser, &$f_name, key, &mut self.$f_name
                     );
                 })*
 
                 // Return the parsed key as an Err if no match
-                return $crate::private::arg::unknown_argument(key);
+                return $crate::r#priv::unknown_argument(key);
             }
 
             fn check(
                 &self,
-                checker: &mut $crate::private::Checker,
+                checker: &mut $crate::r#priv::Checker,
             ) {
                 // Generate argument variables, which can be referred in #[check(...)]
-                $(let $f_name: &dyn $crate::private::AnyArg = &self.$f_name;)*
+                $(let $f_name: &dyn $crate::r#priv::AnyArg = &self.$f_name;)*
 
                 // Generate group variables
-                $($(let $group: &[&dyn $crate::private::AnyArg] = &$group_val;)*)*
+                $($(let $group: &[&dyn $crate::r#priv::AnyArg] = &$group_val;)*)*
 
                 // Add container level checks, including groups, requirements, etc
-                $($($crate::private::Checker::$check(
+                $($($crate::r#priv::Checker::$check(
                     checker,
                     $($check_val,)*
                 );)*)*
 
                 // Add field level checks, where the field is passed as the first parameter
-                $($($($crate::private::Checker::$f_check(
+                $($($($crate::r#priv::Checker::$f_check(
                     checker,
                     $f_name,
                     $($f_check_val,)*
@@ -168,7 +168,7 @@ macro_rules! __define_args_impl {
             $(#[$v_attr])* $v_name($v_ty),
         )*}
 
-        impl $crate::private::ArgEnum for $name {
+        impl $crate::r#priv::ArgEnum for $name {
             fn name(&self) -> &'static str {
                 match self {$(
                     $name::$v_name(_) => stringify!($v_name),
@@ -176,21 +176,21 @@ macro_rules! __define_args_impl {
             }
 
             fn parse_next(
-                parser: &mut $crate::private::Parser,
-            ) -> $crate::private::arg::EnumParseResult<$name> {
+                parser: &mut $crate::r#priv::Parser,
+            ) -> $crate::r#priv::EnumParseResult<$name> {
                 // The parsing process is almost the same as ArgStruct,
-                $(let mut $v_name = $crate::private::arg::new_attrs();
-                $($($crate::private::ArgAttrs::$arg(&mut $v_name, $($arg_val,)*);)*)*)*
+                $(let mut $v_name = $crate::r#priv::ArgAttrs::new();
+                $($($crate::r#priv::ArgAttrs::$arg(&mut $v_name, $($arg_val,)*);)*)*)*
 
-                let key = $crate::private::arg::parse_key(parser)?;
-                $(if $crate::private::arg::is_key(&key, stringify!($v_name)) {
+                let key = parser.peek_key()?;
+                $(if &key == stringify!($v_name) {
                     // except here we return the parsed enum directly.
-                    return $crate::private::arg::parse_value_into::<_, $name>(
+                    return $crate::r#priv::parse_args_enum::<$v_ty, $name>(
                         parser, &$v_name, key, $name::$v_name
                     );
                 })*
 
-                return $crate::private::arg::unknown_argument(key);
+                return $crate::r#priv::unknown_argument(key);
             }
         }
     };
