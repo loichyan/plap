@@ -60,14 +60,10 @@ impl Errors {
         self.add(syn::Error::new(span, msg))
     }
 
-    // TODO: fail() -> Result<()>
-    pub fn fail<T>(&mut self) -> syn::Result<T>
-    where
-        T: Default,
-    {
+    pub fn fail(&mut self) -> syn::Result<()> {
         match self.e.take() {
             Some(e) => Err(e),
-            None => Ok(T::default()),
+            None => Ok(()),
         }
     }
 }
