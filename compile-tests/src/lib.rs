@@ -28,6 +28,7 @@ fn test_impl(
                 plap::Parser::new(input).parse_all_with(|p| args.parse_next(p))
             });
             errors.add_result(r);
+            checker.with_source(attr.path().get_ident().unwrap().span());
         }
         args.check_with(&mut checker);
         args.reset();
