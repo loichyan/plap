@@ -62,7 +62,7 @@ impl Checker {
 
     // ---------------------- *
     // container level checks *
-    // ----------------------
+    // ---------------------- *
 
     pub fn required_each<'a>(&mut self, args: impl AsRef<[&'a dyn AnyArg]>) -> &mut Self {
         self._required_each(args.as_ref())
@@ -123,7 +123,7 @@ impl Checker {
 
     // ------------------ *
     // field level checks *
-    // ------------------
+    // ------------------ *
 
     pub fn required(&mut self, arg: &dyn AnyArg) -> &mut Self {
         if arg.keys().is_empty() {
