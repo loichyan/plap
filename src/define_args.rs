@@ -38,7 +38,7 @@ macro_rules! __define_args_impl {
     (@body=[$($b:tt)*] arg=$a:tt check=$c:tt $name:ident($ty:ty), $($rest:tt)*) => {
         $crate::__define_args_impl!(@body=[$($b)* @arg=$a @check=$c $name($ty),] arg=[] check=[] $($rest)*);
     };
-    (@body=[$($b:tt)*] arg=$_a:tt check=$_c:tt $(,)?) => {
+    (@body=[$($b:tt)*] arg=$_a:tt check=$_c:tt) => {
         $crate::__define_args_impl!(@$($b)*);
     };
     // Generate implementations for structs
