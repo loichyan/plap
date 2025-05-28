@@ -238,15 +238,15 @@ fn combination<T>(arr: &[T]) -> impl '_ + Iterator<Item = (&'_ T, &'_ T)> {
 }
 
 fn fmt_group<'a>(args: &'a [&dyn AnyArg]) -> impl 'a + fmt::Display {
+    use fmt::Write;
     FmtWith(|f| {
-        use fmt::Display;
         let mut iter = args.iter();
         if let Some(first) = iter.next() {
-            first.name().fmt(f)?;
+            f.write_str(first.name())?;
         }
         for a in iter {
-            f.write_str(" | ")?;
-            a.name().fmt(f)?;
+            f.write_char('|')?;
+            f.write_str(a.name())?;
         }
         Ok(())
     })
