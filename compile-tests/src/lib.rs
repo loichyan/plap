@@ -8,8 +8,12 @@ fn test_impl(
     let name = syn::parse::<syn::Ident>(attr)?;
     let item = syn::parse::<syn::ItemStruct>(item)?;
 
-    let mut args = registry::get(&name.to_string())
-        .ok_or_else(|| syn::Error::new(name.span(), "the required definition is not found"))?;
+    let mut args = registry::get(&name.to_string()).ok_or_else(|| {
+        syn::Error::new(
+            name.span(),
+            format!("required definition '{name}' is not found"),
+        )
+    })?;
     let mut checker = plap::Checker::new();
     let mut errors = plap::Errors::default();
 

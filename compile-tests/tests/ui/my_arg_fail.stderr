@@ -1,0 +1,11 @@
+error: `arg4` conflicts with `arg2`
+ --> tests/ui/my_arg_fail.rs:5:39
+  |
+5 |     #[my_arg(arg1 = "value #2", arg2, arg4 = "Whatever")]
+  |                                       ^^^^
+
+error: `arg2` conflicts with `arg4`
+ --> tests/ui/my_arg_fail.rs:5:33
+  |
+5 |     #[my_arg(arg1 = "value #2", arg2, arg4 = "Whatever")]
+  |                                 ^^^^

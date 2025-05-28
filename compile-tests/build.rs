@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 fn main() {
     println!("cargo:rerun-if-changed=tests");
     let outdir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    generate_includes("tests".as_ref(), &outdir.join("tests_includes.rs"));
+    generate_includes("tests/ui".as_ref(), &outdir.join("tests_includes.rs"));
 }
 
 fn generate_includes(src: &Path, dst: &Path) {
