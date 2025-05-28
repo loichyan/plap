@@ -34,7 +34,9 @@ pub struct Errors {
 }
 
 impl Errors {
-    // TODO: pub fn new()
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn add(&mut self, err: syn::Error) {
         if let Some(e) = &mut self.e {
